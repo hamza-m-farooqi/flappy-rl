@@ -1,0 +1,40 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+*.egg-info/
+build/
+dist/
+wheels/
+
+# Python tooling
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+
+# Environment files
+.env
+*.local
+
+# Runtime/generated project data
+checkpoints/
+docs/
+
+# Frontend
+web/node_modules/
+web/dist/
+web/dist-ssr/
+web/*.log
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
