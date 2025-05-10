@@ -1,0 +1,22 @@
+[world]
+screen_width = 800
+screen_height = 600
+ground_height = 80
+fps = 60
+
+[bird]
+start_x = 160
+start_y = 300
+radius = 18
+gravity = 0.45
+jump_velocity = -8.5
+max_fall_speed = 10.0
+
+[pipes]
+width = 72
+gap_size = 170
+speed = 3.0
+spawn_interval = 90
+start_offset = 320
+min_gap_y = 140
+max_gap_y = 380

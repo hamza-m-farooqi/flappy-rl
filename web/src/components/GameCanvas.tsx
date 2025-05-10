@@ -1,0 +1,89 @@
+import { useEffect, useRef } from 'react';
+
+export type GameState = {
+  frame: number;
+  score: number;
+  game_over: boolean;
+  world: {
+    screen_width: number;
+    screen_height: number;
+    ground_height: number;
+  };
+  bird: {
+    x: number;
+    y: number;
+    radius: number;
+    velocity: number;
+    alive: boolean;
+  };
+  pipes: Array<{
+    x: number;
+    width: number;
+    gap_y: number;
+    gap_size: number;
+  }>;
+};
+
+type GameCanvasProps = {
+  gameState: GameState;
+};
+
+export function GameCanvas({ gameState }: GameCanvasProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+
+    const context = canvas.getContext('2d');
+    if (!context) {
+      return;
+    }
+
+    const { screen_width, screen_height, ground_height } = gameState.world;
+    canvas.width = screen_width;
+    canvas.height = screen_height;
+
+    context.clearRect(0, 0, screen_width, screen_height);
+    context.fillStyle = '#eef7ff';
+    context.fillRect(0, 0, screen_width, screen_height);
+
+    context.fillStyle = '#e0cd96';
+    context.fillRect(0, screen_height - ground_height, screen_width, ground_height);
+
+    context.fillStyle = '#44a05c';
+    const floorY = screen_height - ground_height;
+    for (const pipe of gameState.pipes) {
+      const gapTop = pipe.gap_y - pipe.gap_size / 2;
+      const gapBottom = pipe.gap_y + pipe.gap_size / 2;
+      context.fillRect(pipe.x, 0, pipe.width, gapTop);
+      context.fillRect(pipe.x, gapBottom, pipe.width, floorY - gapBottom);
+    }
+
+    context.beginPath();
+    context.arc(gameState.bird.x, gameState.bird.y, gameState.bird.radius, 0, Math.PI * 2);
+    context.fillStyle = '#e8ba44';
+    context.fill();
+
+    context.fillStyle = '#293338';
+    context.font = 'bold 20px Georgia';
+    context.fillText(`Score: ${gameState.score}`, 18, 30);
+
+    if (gameState.game_over) {
+      context.font = 'bold 28px Georgia';
+      context.fillText('Game Over', screen_width / 2 - 78, 54);
+    }
+  }, [gameState]);
+
+  return (
+    <div className="canvas-shell">
+      <canvas
+        ref={canvasRef}
+        className="game-canvas"
+        aria-label="Game state preview"
+      />
+    </div>
+  );
+}

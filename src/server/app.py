@@ -3,6 +3,8 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.server.routers.game import router as game_router
+
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
@@ -26,6 +28,7 @@ def create_app() -> FastAPI:
         """Return the service health status."""
         return {"status": "ok"}
 
+    app.include_router(game_router)
     return app
 
 
