@@ -12,6 +12,9 @@ class Bird:
     radius: int
     velocity: float = 0.0
     alive: bool = True
+    genome_id: str | None = None
+    frames_alive: int = 0
+    pipes_passed: int = 0
 
     def jump(self, jump_velocity: float) -> None:
         """Apply an immediate upward velocity impulse."""
@@ -25,3 +28,4 @@ class Bird:
 
         self.velocity = min(self.velocity + gravity, max_fall_speed)
         self.y += self.velocity
+        self.frames_alive += 1

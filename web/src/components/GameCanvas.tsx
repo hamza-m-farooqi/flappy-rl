@@ -4,6 +4,8 @@ export type GameState = {
   frame: number;
   score: number;
   game_over: boolean;
+  alive_count?: number;
+  total_birds?: number;
   world: {
     screen_width: number;
     screen_height: number;
@@ -16,12 +18,29 @@ export type GameState = {
     velocity: number;
     alive: boolean;
   };
+  birds?: Array<{
+    x: number;
+    y: number;
+    radius: number;
+    velocity: number;
+    alive: boolean;
+    genome_id?: string | null;
+    pipes_passed?: number;
+  }>;
   pipes: Array<{
     x: number;
     width: number;
     gap_y: number;
     gap_size: number;
   }>;
+};
+
+export type TrainingFrame = GameState & {
+  type: 'training_frame';
+  generation: number;
+  alive_count: number;
+  total_birds: number;
+  best_fitness: number;
 };
 
 type GameCanvasProps = {
@@ -62,10 +81,15 @@ export function GameCanvas({ gameState }: GameCanvasProps) {
       context.fillRect(pipe.x, gapBottom, pipe.width, floorY - gapBottom);
     }
 
-    context.beginPath();
-    context.arc(gameState.bird.x, gameState.bird.y, gameState.bird.radius, 0, Math.PI * 2);
-    context.fillStyle = '#e8ba44';
-    context.fill();
+    const birds =
+      gameState.birds && gameState.birds.length > 0 ? gameState.birds : [gameState.bird];
+    const livingBirds = birds.filter((bird) => bird.alive);
+    for (const bird of livingBirds) {
+      context.beginPath();
+      context.arc(bird.x, bird.y, bird.radius, 0, Math.PI * 2);
+      context.fillStyle = 'rgba(232, 186, 68, 0.48)';
+      context.fill();
+    }
 
     context.fillStyle = '#293338';
     context.font = 'bold 20px Georgia';

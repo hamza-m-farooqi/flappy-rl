@@ -64,12 +64,16 @@ class PygameRenderer:
             pygame.draw.rect(self.screen, self.PIPE, bottom_rect, border_radius=10)
 
     def _draw_bird(self) -> None:
-        pygame.draw.circle(
-            self.screen,
-            self.BIRD,
-            (int(self.world.bird.x), int(self.world.bird.y)),
-            self.world.bird.radius,
-        )
+        for bird in self.world.birds:
+            if not bird.alive:
+                continue
+
+            pygame.draw.circle(
+                self.screen,
+                self.BIRD,
+                (int(bird.x), int(bird.y)),
+                bird.radius,
+            )
 
     def _draw_hud(self) -> None:
         score_surface = self.font.render(f"Score: {self.world.score}", True, self.TEXT)

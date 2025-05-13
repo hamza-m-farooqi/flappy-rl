@@ -20,3 +20,7 @@ spawn_interval = 90
 start_offset = 320
 min_gap_y = 140
 max_gap_y = 380
+
+[training]
+max_frames_per_generation = 1800
+frame_delay_ms = 16

@@ -14,11 +14,12 @@ class World:
     """Manage bird state, pipes, scoring, and collision checks."""
 
     config: dict[str, Any]
+    population_size: int = 1
     rng: random.Random = field(default_factory=random.Random)
     frame_count: int = 0
     score: int = 0
     game_over: bool = False
-    bird: Bird = field(init=False)
+    birds: list[Bird] = field(init=False)
     pipes: list[Pipe] = field(init=False)
 
     def __post_init__(self) -> None:
@@ -28,20 +29,23 @@ class World:
         self.reset()
 
     @classmethod
-    def from_config(cls) -> World:
+    def from_config(cls, population_size: int = 1) -> World:
         """Create a world using the shared game configuration file."""
-        return cls(config=load_game_config())
+        return cls(config=load_game_config(), population_size=population_size)
 
     def reset(self) -> None:
         """Reset the world to its starting state."""
         self.frame_count = 0
         self.score = 0
         self.game_over = False
-        self.bird = Bird(
-            x=float(self.bird_config["start_x"]),
-            y=float(self.bird_config["start_y"]),
-            radius=int(self.bird_config["radius"]),
-        )
+        self.birds = [
+            Bird(
+                x=float(self.bird_config["start_x"]),
+                y=float(self.bird_config["start_y"]),
+                radius=int(self.bird_config["radius"]),
+            )
+            for _ in range(self.population_size)
+        ]
         self.pipes = [self._spawn_pipe()]
 
     def jump(self) -> None:
@@ -54,10 +58,11 @@ class World:
             return self.serialize()
 
         self.frame_count += 1
-        self.bird.update(
-            gravity=float(self.bird_config["gravity"]),
-            max_fall_speed=float(self.bird_config["max_fall_speed"]),
-        )
+        for bird in self.birds:
+            bird.update(
+                gravity=float(self.bird_config["gravity"]),
+                max_fall_speed=float(self.bird_config["max_fall_speed"]),
+            )
 
         for pipe in self.pipes:
             pipe.update(speed=float(self.pipe_config["speed"]))
@@ -86,6 +91,20 @@ class World:
                 "velocity": self.bird.velocity,
                 "alive": self.bird.alive,
             },
+            "birds": [
+                {
+                    "x": bird.x,
+                    "y": bird.y,
+                    "radius": bird.radius,
+                    "velocity": bird.velocity,
+                    "alive": bird.alive,
+                    "genome_id": bird.genome_id,
+                    "pipes_passed": bird.pipes_passed,
+                }
+                for bird in self.birds
+            ],
+            "alive_count": self.alive_count,
+            "total_birds": len(self.birds),
             "pipes": [
                 {
                     "x": pipe.x,
@@ -125,9 +144,16 @@ class World:
     def _update_score(self) -> None:
         """Increment score when the bird fully passes a pipe."""
         for pipe in self.pipes:
-            if not pipe.passed and pipe.right < self.bird.x:
+            for bird in self.birds:
+                bird_key = bird.genome_id or "player"
+                if pipe.right < bird.x and bird_key not in pipe.passed_by:
+                    pipe.passed_by.add(bird_key)
+                    bird.pipes_passed += 1
+
+            if pipe.passed_by:
                 pipe.passed = True
-                self.score += 1
+
+        self.score = max((bird.pipes_passed for bird in self.birds), default=0)
 
     def _check_collisions(self) -> None:
         """Mark the bird dead when it collides with the world or pipes."""
@@ -135,26 +161,47 @@ class World:
         ground_height = float(self.world_config["ground_height"])
         floor_y = screen_height - ground_height
 
-        if (
-            self.bird.y - self.bird.radius <= 0
-            or self.bird.y + self.bird.radius >= floor_y
-        ):
-            self._set_game_over()
-            return
+        for bird in self.birds:
+            if not bird.alive:
+                continue
 
-        bird_left = self.bird.x - self.bird.radius
-        bird_right = self.bird.x + self.bird.radius
-        bird_top = self.bird.y - self.bird.radius
-        bird_bottom = self.bird.y + self.bird.radius
+            if bird.y - bird.radius <= 0 or bird.y + bird.radius >= floor_y:
+                bird.alive = False
+                continue
 
-        for pipe in self.pipes:
-            overlaps_x = bird_right >= pipe.left and bird_left <= pipe.right
-            in_gap = bird_top >= pipe.gap_top and bird_bottom <= pipe.gap_bottom
-            if overlaps_x and not in_gap:
-                self._set_game_over()
-                return
+            bird_left = bird.x - bird.radius
+            bird_right = bird.x + bird.radius
+            bird_top = bird.y - bird.radius
+            bird_bottom = bird.y + bird.radius
+
+            for pipe in self.pipes:
+                overlaps_x = bird_right >= pipe.left and bird_left <= pipe.right
+                in_gap = bird_top >= pipe.gap_top and bird_bottom <= pipe.gap_bottom
+                if overlaps_x and not in_gap:
+                    bird.alive = False
+                    break
+
+        self.game_over = self.alive_count == 0
 
     def _set_game_over(self) -> None:
         """Stop the world and mark the bird dead."""
         self.game_over = True
-        self.bird.alive = False
+        for bird in self.birds:
+            bird.alive = False
+
+    @property
+    def bird(self) -> Bird:
+        """Return the primary bird for single-bird interfaces."""
+        return self.birds[0]
+
+    @property
+    def alive_count(self) -> int:
+        """Return the number of living birds."""
+        return sum(1 for bird in self.birds if bird.alive)
+
+    def get_next_pipe(self, x_position: float) -> Pipe | None:
+        """Return the next upcoming pipe for a given x position."""
+        for pipe in self.pipes:
+            if pipe.right >= x_position:
+                return pipe
+        return None

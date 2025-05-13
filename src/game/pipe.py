@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -12,6 +12,7 @@ class Pipe:
     width: int
     gap_size: int
     passed: bool = False
+    passed_by: set[str] = field(default_factory=set)
 
     def update(self, speed: float) -> None:
         """Move the pipe left by one simulation tick."""
