@@ -4,6 +4,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.server.routers.game import router as game_router
+from src.server.routers.leaderboard import router as leaderboard_router
 from src.server.ws_handler import connection_manager
 
 
@@ -40,6 +41,7 @@ def create_app() -> FastAPI:
             connection_manager.disconnect(websocket)
 
     app.include_router(game_router)
+    app.include_router(leaderboard_router)
     return app
 
 

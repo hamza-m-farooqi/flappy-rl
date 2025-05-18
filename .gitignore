@@ -17,6 +17,8 @@ htmlcov/
 
 # Environment files
 .env
+.env.server
+.env.web
 *.local
 
 # Runtime/generated project data

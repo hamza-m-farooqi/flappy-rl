@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { TrainingFrame } from '../components/GameCanvas';
-
-const TRAINING_SOCKET_URL = 'ws://localhost:8000/ws/training';
+import { TRAINING_WS_URL } from '../config/env';
 
 export function useTrainingSocket() {
   const [frame, setFrame] = useState<TrainingFrame | null>(null);
@@ -11,7 +10,7 @@ export function useTrainingSocket() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const socket = new WebSocket(TRAINING_SOCKET_URL);
+    const socket = new WebSocket(TRAINING_WS_URL);
 
     socket.onopen = () => {
       setStatus('connected');

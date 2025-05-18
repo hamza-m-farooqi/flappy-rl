@@ -45,9 +45,10 @@ export type TrainingFrame = GameState & {
 
 type GameCanvasProps = {
   gameState: GameState;
+  overlayText?: string;
 };
 
-export function GameCanvas({ gameState }: GameCanvasProps) {
+export function GameCanvas({ gameState, overlayText }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -95,9 +96,9 @@ export function GameCanvas({ gameState }: GameCanvasProps) {
     context.font = 'bold 20px Georgia';
     context.fillText(`Score: ${gameState.score}`, 18, 30);
 
-    if (gameState.game_over) {
+    if (gameState.game_over || overlayText) {
       context.font = 'bold 28px Georgia';
-      context.fillText('Game Over', screen_width / 2 - 78, 54);
+      context.fillText(overlayText ?? 'Game Over', screen_width / 2 - 78, 54);
     }
   }, [gameState]);
 
