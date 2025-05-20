@@ -145,6 +145,9 @@ class World:
         """Increment score when the bird fully passes a pipe."""
         for pipe in self.pipes:
             for bird in self.birds:
+                if not bird.alive:
+                    continue
+
                 bird_key = bird.genome_id or "player"
                 if pipe.right < bird.x and bird_key not in pipe.passed_by:
                     pipe.passed_by.add(bird_key)

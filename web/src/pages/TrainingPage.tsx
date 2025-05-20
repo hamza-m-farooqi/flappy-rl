@@ -31,9 +31,37 @@ export function TrainingPage() {
             <div className="stat-pill">
               Alive {frame.alive_count}/{frame.total_birds}
             </div>
-            <div className="stat-pill">Best fitness {Math.round(frame.best_fitness)}</div>
+            <div className="stat-pill">
+              Generation best score {frame.generation_best_pipes}
+            </div>
+            <div className="stat-pill">All-time best score {frame.best_pipes}</div>
+            <div className="stat-pill">
+              Generation fitness {Math.round(frame.generation_best_fitness)}
+            </div>
+            <div className="stat-pill">Champion fitness {Math.round(frame.best_fitness)}</div>
             <div className="stat-pill">Frame {frame.frame}</div>
+            <div className="stat-pill">
+              {frame.champion_available ? 'Champion checkpoint ready' : 'No checkpoint yet'}
+            </div>
+            {frame.last_saved_generation ? (
+              <div className="stat-pill">
+                Best saved at generation {frame.last_saved_generation}
+              </div>
+            ) : null}
+            <div className="stat-pill">
+              {frame.generation_best_pipes > frame.best_pipes
+                ? 'Improving now'
+                : frame.generation_best_pipes === frame.best_pipes
+                  ? 'Matching best'
+                  : 'Below champion'}
+            </div>
           </div>
+          {frame.champion_saved_this_generation ? (
+            <p className="status-banner success">
+              Champion checkpoint updated. Snapshot saved to{' '}
+              <code>{frame.last_checkpoint_path ?? frame.champion_path}</code>
+            </p>
+          ) : null}
           <GameCanvas gameState={frame} />
         </>
       ) : null}

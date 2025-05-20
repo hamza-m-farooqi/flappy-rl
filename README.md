@@ -2,7 +2,8 @@
 
 `flappy-rl` is a browser-first Flappy Bird + neuroevolution project built with a Python
 backend and a React frontend. It currently supports local human play, live browser-based
-training visualization, and MongoDB-backed leaderboard submissions.
+training visualization, MongoDB-backed leaderboard submissions, and human-vs-AI compete
+mode using a saved champion genome.
 
 ## Current Features
 
@@ -10,6 +11,11 @@ training visualization, and MongoDB-backed leaderboard submissions.
 - local Pygame Flappy Bird runtime for manual play
 - browser play mode with client-side physics for low-latency controls
 - live training monitor that streams a NEAT-controlled bird swarm over WebSocket
+- training monitor that shows game score and fitness separately
+- compete mode that races the browser player against a saved AI champion
+- champion genome persistence in `checkpoints/champion.pkl`
+- historical best-checkpoint snapshots such as `checkpoints/generation5-3300.pkl`
+- resumable NEAT population checkpoints such as `checkpoints/neat-checkpoint-5`
 - leaderboard API with MongoDB persistence
 - leaderboard page and browser score submission flow
 - shared game configuration via `config/game.toml`
@@ -81,6 +87,7 @@ Frontend `.env.web`:
 ```bash
 VITE_API_BASE_URL=http://localhost:8000
 VITE_TRAINING_WS_URL=ws://localhost:8000/ws/training
+VITE_COMPETE_WS_URL=ws://localhost:8000/ws/compete
 ```
 
 ## Running Locally
@@ -110,7 +117,45 @@ Start live NEAT training with the backend server:
 uv run python -m src.main --train --serve
 ```
 
-Start the Phase 1/2 style dev helper:
+Resume live NEAT training from the latest saved population checkpoint:
+
+```bash
+uv run python -m src.main --train --serve --resume
+```
+
+Training automatically updates `checkpoints/champion.pkl` only when a generation
+produces a new all-time best result. Each new all-time best also saves a historical
+snapshot such as `checkpoints/generation5-3300.pkl`, where the number is the
+generation and the best pipe score from that saved champion.
+
+Training also saves resumable population checkpoints such as
+`checkpoints/neat-checkpoint-5` every few generations. These checkpoints contain the
+full NEAT population state and are what `--resume` uses to continue training after a
+restart. `champion.pkl` is still used for compete mode and best-model loading.
+
+Run compete mode:
+
+1. make sure a champion genome exists from a prior training run
+2. start the backend:
+
+```bash
+uv run python -m src.main
+```
+
+3. start the frontend:
+
+```bash
+cd web
+npm run dev
+```
+
+4. open:
+
+```text
+http://localhost:5173/compete
+```
+
+Start the standard dev helper:
 
 ```bash
 sh scripts/dev.sh
@@ -125,6 +170,7 @@ separate `--train --serve` command above instead.
 - backend: `http://localhost:8000`
 - backend health: `http://localhost:8000/health`
 - training websocket: `ws://localhost:8000/ws/training`
+- compete websocket: `ws://localhost:8000/ws/compete`
 
 ## Verification
 

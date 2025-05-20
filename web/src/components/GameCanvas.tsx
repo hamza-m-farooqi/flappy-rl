@@ -17,6 +17,7 @@ export type GameState = {
     radius: number;
     velocity: number;
     alive: boolean;
+    genome_id?: string | null;
   };
   birds?: Array<{
     x: number;
@@ -40,7 +41,16 @@ export type TrainingFrame = GameState & {
   generation: number;
   alive_count: number;
   total_birds: number;
+  generation_best_fitness: number;
+  generation_best_pipes: number;
   best_fitness: number;
+  best_pipes: number;
+  best_genome_id?: number | null;
+  champion_available: boolean;
+  champion_path: string;
+  champion_saved_this_generation: boolean;
+  last_saved_generation?: number | null;
+  last_checkpoint_path?: string | null;
 };
 
 type GameCanvasProps = {
@@ -88,7 +98,12 @@ export function GameCanvas({ gameState, overlayText }: GameCanvasProps) {
     for (const bird of livingBirds) {
       context.beginPath();
       context.arc(bird.x, bird.y, bird.radius, 0, Math.PI * 2);
-      context.fillStyle = 'rgba(232, 186, 68, 0.48)';
+      context.fillStyle =
+        bird.genome_id === 'human'
+          ? 'rgba(40, 118, 168, 0.82)'
+          : bird.genome_id === 'ai'
+            ? 'rgba(218, 90, 42, 0.85)'
+            : 'rgba(232, 186, 68, 0.48)';
       context.fill();
     }
 

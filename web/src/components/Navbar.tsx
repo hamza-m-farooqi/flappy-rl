@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 const NAV_ITEMS = [
   { to: '/', label: 'Home', end: true },
   { to: '/play', label: 'Play' },
+  { to: '/compete', label: 'Compete' },
   { to: '/training', label: 'Training' },
   { to: '/leaderboard', label: 'Leaderboard' },
   { to: '/admin', label: 'Admin' },

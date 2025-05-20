@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Navbar } from './components/Navbar';
 import { AdminPage } from './pages/AdminPage';
+import { CompetePage } from './pages/CompetePage';
 import { HomePage } from './pages/HomePage';
 import { LeaderboardPage } from './pages/LeaderboardPage';
 import { PlayPage } from './pages/PlayPage';
@@ -15,6 +16,7 @@ function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/play" element={<PlayPage />} />
+            <Route path="/compete" element={<CompetePage />} />
             <Route path="/training" element={<TrainingPage />} />
             <Route path="/leaderboard" element={<LeaderboardPage />} />
             <Route path="/admin" element={<AdminPage />} />

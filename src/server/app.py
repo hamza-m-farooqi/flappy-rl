@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.server.routers.compete import router as compete_router
 from src.server.routers.game import router as game_router
 from src.server.routers.leaderboard import router as leaderboard_router
 from src.server.ws_handler import connection_manager
@@ -42,6 +43,7 @@ def create_app() -> FastAPI:
 
     app.include_router(game_router)
     app.include_router(leaderboard_router)
+    app.include_router(compete_router)
     return app
 
 

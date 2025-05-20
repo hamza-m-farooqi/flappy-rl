@@ -40,5 +40,8 @@ export default defineConfig({
     'import.meta.env.VITE_TRAINING_WS_URL': JSON.stringify(
       rootWebEnv.VITE_TRAINING_WS_URL ?? 'ws://localhost:8000/ws/training',
     ),
+    'import.meta.env.VITE_COMPETE_WS_URL': JSON.stringify(
+      rootWebEnv.VITE_COMPETE_WS_URL ?? 'ws://localhost:8000/ws/compete',
+    ),
   },
 })

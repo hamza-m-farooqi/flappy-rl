@@ -29,6 +29,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run the FastAPI server alongside other modes.",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume NEAT training from the latest saved population checkpoint.",
+    )
     return parser
 
 
@@ -63,15 +68,15 @@ def run_api_server() -> None:
     uvicorn.run("src.server.app:app", host="0.0.0.0", port=8000, reload=False)
 
 
-def run_training() -> None:
+def run_training(resume: bool = False) -> None:
     """Run headless NEAT training in the foreground."""
-    trainer = NeatTrainer()
+    trainer = NeatTrainer(resume=resume)
     trainer.run()
 
 
-def run_training_with_server() -> None:
+def run_training_with_server(resume: bool = False) -> None:
     """Run the API server and background trainer together."""
-    trainer = NeatTrainer()
+    trainer = NeatTrainer(resume=resume)
     training_thread = threading.Thread(target=trainer.run, daemon=True)
     training_thread.start()
     run_api_server()
@@ -85,11 +90,11 @@ def main() -> None:
         return
 
     if args.train and args.serve:
-        run_training_with_server()
+        run_training_with_server(resume=args.resume)
         return
 
     if args.train:
-        run_training()
+        run_training(resume=args.resume)
         return
 
     run_api_server()
