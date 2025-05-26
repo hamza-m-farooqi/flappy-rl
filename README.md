@@ -12,10 +12,12 @@ mode using a saved champion genome.
 - browser play mode with client-side physics for low-latency controls
 - live training monitor that streams a NEAT-controlled bird swarm over WebSocket
 - training monitor that shows game score and fitness separately
-- compete mode that races the browser player against a saved AI champion
-- champion genome persistence in `checkpoints/champion.pkl`
-- historical best-checkpoint snapshots such as `checkpoints/generation5-3300.pkl`
-- resumable NEAT population checkpoints such as `checkpoints/neat-checkpoint-5`
+- admin page for starting, resuming, and stopping named training runs
+- JWT-protected admin routes with browser login
+- compete mode that lets the player choose a saved AI champion before racing
+- champion genome persistence under named run folders like `checkpoints/spring-run/champion.pkl`
+- historical best snapshots such as `checkpoints/spring-run/generation5-8.pkl`
+- resumable NEAT population checkpoints such as `checkpoints/spring-run/neat-checkpoint-5`
 - leaderboard API with MongoDB persistence
 - leaderboard page and browser score submission flow
 - shared game configuration via `config/game.toml`
@@ -35,6 +37,7 @@ mode using a saved champion genome.
 ```text
 flappy-rl/
 ├── config/              # Game and NEAT configuration
+├── checkpoints/         # Named training run directories and saved champions
 ├── src/
 │   ├── ai/              # NEAT training layer
 │   ├── db/              # MongoDB client
@@ -80,6 +83,8 @@ Backend `.env.server`:
 ```bash
 MONGODB_URI=mongodb://localhost:27017
 MONGODB_DATABASE=flappy_rl
+ADMIN_PASSWORD=change-me
+ADMIN_JWT_SECRET=change-me-secret
 ```
 
 Frontend `.env.web`:
@@ -111,31 +116,38 @@ Start the local Pygame human-play mode:
 uv run python -m src.main --human
 ```
 
-Start live NEAT training with the backend server:
+Start a named NEAT training run with the backend server:
 
 ```bash
-uv run python -m src.main --train --serve
+uv run python -m src.main --train --serve --run-name spring-run
 ```
 
-Resume live NEAT training from the latest saved population checkpoint:
+Resume a named NEAT training run from its latest saved population checkpoint:
 
 ```bash
-uv run python -m src.main --train --serve --resume
+uv run python -m src.main --train --serve --resume --run-name spring-run
 ```
 
-Training automatically updates `checkpoints/champion.pkl` only when a generation
-produces a new all-time best result. Each new all-time best also saves a historical
-snapshot such as `checkpoints/generation5-3300.pkl`, where the number is the
-generation and the best pipe score from that saved champion.
+Training automatically updates a named run champion only when that run produces a new
+all-time best result. Each new all-time best also saves a historical snapshot such as
+`checkpoints/spring-run/generation5-8.pkl`, where the number is the generation and the
+saved score for that run’s champion.
 
 Training also saves resumable population checkpoints such as
-`checkpoints/neat-checkpoint-5` every few generations. These checkpoints contain the
-full NEAT population state and are what `--resume` uses to continue training after a
-restart. `champion.pkl` is still used for compete mode and best-model loading.
+`checkpoints/spring-run/neat-checkpoint-5` every few generations. These checkpoints
+contain the full NEAT population state and are what `--resume` uses to continue
+training after a restart. `champion.pkl` inside the same run folder is used for
+compete mode and best-model loading.
+
+You can manage named runs from the browser at `/admin`:
+- log in with the admin password from `.env.server`
+- start a new run by choosing a training name
+- resume an existing run from its latest checkpoint
+- stop the active run
 
 Run compete mode:
 
-1. make sure a champion genome exists from a prior training run
+1. make sure at least one named training run has a saved champion
 2. start the backend:
 
 ```bash
@@ -154,6 +166,8 @@ npm run dev
 ```text
 http://localhost:5173/compete
 ```
+
+The compete page will first show a champion catalog. Choose a saved run, then start the race against that run’s champion.
 
 Start the standard dev helper:
 

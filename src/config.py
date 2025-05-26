@@ -34,3 +34,13 @@ def get_mongodb_uri() -> str:
 def get_mongodb_database() -> str:
     """Return the backend MongoDB database name from the root .env."""
     return os.getenv("MONGODB_DATABASE", "flappy_rl")
+
+
+def get_admin_password() -> str:
+    """Return the admin password used for protected admin routes."""
+    return os.getenv("ADMIN_PASSWORD", "change-me")
+
+
+def get_admin_jwt_secret() -> str:
+    """Return the signing secret for admin JWT tokens."""
+    return os.getenv("ADMIN_JWT_SECRET", "change-me-secret")

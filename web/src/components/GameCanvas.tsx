@@ -38,6 +38,7 @@ export type GameState = {
 
 export type TrainingFrame = GameState & {
   type: 'training_frame';
+  run_name: string;
   generation: number;
   alive_count: number;
   total_birds: number;

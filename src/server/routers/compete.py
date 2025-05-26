@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 import neat
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import Query
 
-from src.ai.genome_io import champion_exists, load_champion
+from src.ai.genome_io import (
+    champion_exists,
+    list_available_champions,
+    load_champion,
+    normalize_run_name,
+)
 from src.ai.trainer import NEAT_CONFIG_PATH
 from src.ai.sensors import build_inputs
 from src.game.world import World
@@ -25,20 +32,33 @@ def build_neat_config() -> neat.Config:
     )
 
 
+@router.get("/compete/champions")
+async def list_compete_champions() -> dict[str, list[dict[str, Any]]]:
+    """Return the available named champions for compete mode selection."""
+    return {"champions": list_available_champions()}
+
+
 @router.websocket("/ws/compete")
-async def compete_socket(websocket: WebSocket) -> None:
+async def compete_socket(
+    websocket: WebSocket,
+    run_name: str = Query(...),
+) -> None:
     """Run a live compete session between the browser player and the saved champion."""
     await websocket.accept()
+    normalized_run_name = normalize_run_name(run_name)
 
-    if not champion_exists():
+    if not champion_exists(normalized_run_name):
         await websocket.send_json(
-            {"type": "error", "message": "No champion genome available yet."}
+            {
+                "type": "error",
+                "message": f"No champion genome available yet for '{normalized_run_name}'.",
+            }
         )
         await websocket.close()
         return
 
     config = build_neat_config()
-    champion = load_champion()
+    champion = load_champion(normalized_run_name)
     network = neat.nn.FeedForwardNetwork.create(champion, config)
     world = World.from_config(population_size=2)
     human_bird = world.birds[0]
@@ -78,6 +98,7 @@ async def compete_socket(websocket: WebSocket) -> None:
                 **state,
                 "human_bird": state["birds"][0],
                 "ai_bird": state["birds"][1],
+                "run_name": normalized_run_name,
                 "human_score": world.birds[0].pipes_passed,
                 "ai_score": world.birds[1].pipes_passed,
                 "winner": determine_winner(world),

@@ -34,6 +34,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Resume NEAT training from the latest saved population checkpoint.",
     )
+    parser.add_argument(
+        "--run-name",
+        type=str,
+        help="Named training run to start or resume when using --train.",
+    )
     return parser
 
 
@@ -68,15 +73,15 @@ def run_api_server() -> None:
     uvicorn.run("src.server.app:app", host="0.0.0.0", port=8000, reload=False)
 
 
-def run_training(resume: bool = False) -> None:
+def run_training(run_name: str, resume: bool = False) -> None:
     """Run headless NEAT training in the foreground."""
-    trainer = NeatTrainer(resume=resume)
+    trainer = NeatTrainer(run_name=run_name, resume=resume)
     trainer.run()
 
 
-def run_training_with_server(resume: bool = False) -> None:
+def run_training_with_server(run_name: str, resume: bool = False) -> None:
     """Run the API server and background trainer together."""
-    trainer = NeatTrainer(resume=resume)
+    trainer = NeatTrainer(run_name=run_name, resume=resume)
     training_thread = threading.Thread(target=trainer.run, daemon=True)
     training_thread.start()
     run_api_server()
@@ -89,12 +94,15 @@ def main() -> None:
         run_human_mode()
         return
 
+    if args.train and not args.run_name:
+        raise SystemExit("--run-name is required when using --train.")
+
     if args.train and args.serve:
-        run_training_with_server(resume=args.resume)
+        run_training_with_server(run_name=args.run_name, resume=args.resume)
         return
 
     if args.train:
-        run_training(resume=args.resume)
+        run_training(run_name=args.run_name, resume=args.resume)
         return
 
     run_api_server()

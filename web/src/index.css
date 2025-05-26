@@ -320,6 +320,12 @@ h1 {
   color: var(--ink);
 }
 
+.action-button.small,
+.ghost-button.small {
+  padding: 8px 12px;
+  border-radius: 12px;
+}
+
 .leaderboard-shell {
   display: flex;
   flex-direction: column;
@@ -348,6 +354,12 @@ code {
 .leaderboard-head {
   background: var(--accent-soft);
   font-weight: 700;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 @media (max-width: 800px) {

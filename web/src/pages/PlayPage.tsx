@@ -5,7 +5,7 @@ import { API_BASE_URL } from '../config/env';
 import { usePlaySession } from '../hooks/usePlaySession';
 
 export function PlayPage() {
-  const { playState, restart } = usePlaySession();
+  const { hasStarted, playState, restart, start } = usePlaySession();
   const [username, setUsername] = useState('');
   const [submitState, setSubmitState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -36,6 +36,7 @@ export function PlayPage() {
         <h1>Browser Play Mode</h1>
         <p className="lede">
           Local physics run directly in the browser for instant jump response. Press
+          <code>Start Game</code> or <code>Space</code> to begin, then keep using
           <code>Space</code> or tap to fly. Press <code>R</code> to restart anytime.
         </p>
       </div>
@@ -44,14 +45,22 @@ export function PlayPage() {
         <div className="stat-pill">Score {playState.score}</div>
         <div className="stat-pill">Frame {playState.frame}</div>
         <div className="stat-pill">
-          {playState.game_over ? 'State: game over' : 'State: running'}
+          {playState.game_over ? 'State: game over' : hasStarted ? 'State: running' : 'State: ready'}
         </div>
       </div>
 
       <GameCanvas
         gameState={playState}
-        overlayText={playState.game_over ? 'Game Over' : undefined}
+        overlayText={playState.game_over ? 'Game Over' : !hasStarted ? 'Press Space To Start' : undefined}
       />
+
+      {!hasStarted && !playState.game_over ? (
+        <div className="submit-form">
+          <button className="action-button" onClick={start}>
+            Start Game
+          </button>
+        </div>
+      ) : null}
 
       {playState.game_over ? (
         <div className="submit-panel">

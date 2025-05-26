@@ -21,13 +21,24 @@ class ScoreSubmission(BaseModel):
 
 @router.get("")
 async def list_leaderboard() -> dict[str, list[dict[str, Any]]]:
-    """Return the top leaderboard scores."""
+    """Return the top leaderboard scores, keeping only each user's best run."""
     collection = get_database()["leaderboard"]
-    cursor = (
-        collection.find({}, {"_id": 0})
-        .sort("score", -1)
-        .sort("created_at", 1)
-        .limit(10)
+    pipeline = [
+        {"$sort": {"username": 1, "score": -1, "created_at": 1}},
+        {
+            "$group": {
+                "_id": "$username",
+                "username": {"$first": "$username"},
+                "score": {"$first": "$score"},
+                "created_at": {"$first": "$created_at"},
+            }
+        },
+        {"$sort": {"score": -1, "created_at": 1, "username": 1}},
+        {"$limit": 10},
+        {"$project": {"_id": 0, "username": 1, "score": 1, "created_at": 1}},
+    ]
+    cursor = collection.aggregate(
+        pipeline,
     )
     scores = await cursor.to_list(length=10)
     return {"scores": scores}

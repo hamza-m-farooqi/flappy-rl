@@ -2,7 +2,7 @@ import { GameCanvas } from '../components/GameCanvas';
 import { useTrainingSocket } from '../hooks/useTrainingSocket';
 
 export function TrainingPage() {
-  const { frame, status, errorMessage } = useTrainingSocket();
+  const { frame, status, errorMessage, trainingStatus } = useTrainingSocket();
 
   return (
     <section className="page page-training">
@@ -20,13 +20,16 @@ export function TrainingPage() {
         <p className="status-banner">
           {status === 'connecting'
             ? 'Connecting to live training stream...'
-            : 'Waiting for training frames...'}
+            : trainingStatus?.is_running
+              ? `Waiting for live frames from ${trainingStatus.active_run_name ?? 'the active run'}...`
+              : 'No training is currently running. Start or resume a run from the Admin page.'}
         </p>
       ) : null}
 
       {frame ? (
         <>
           <div className="training-stats">
+            <div className="stat-pill">Run {frame.run_name}</div>
             <div className="stat-pill">Generation {frame.generation}</div>
             <div className="stat-pill">
               Alive {frame.alive_count}/{frame.total_birds}

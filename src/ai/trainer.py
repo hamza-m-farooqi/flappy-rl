@@ -7,13 +7,15 @@ from pathlib import Path
 import neat
 
 from src.ai.genome_io import (
-    CHAMPION_PATH,
-    TRAINING_CHECKPOINT_PREFIX,
     champion_exists,
+    champion_path,
+    latest_historical_champion,
     latest_training_checkpoint,
     load_champion,
     load_champion_metadata,
+    normalize_run_name,
     save_champion,
+    training_checkpoint_prefix,
 )
 from src.ai.sensors import build_inputs
 from src.config import load_game_config
@@ -27,10 +29,11 @@ NEAT_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "n
 class NeatTrainer:
     """Run NEAT training and broadcast live swarm updates."""
 
-    def __init__(self, resume: bool = False) -> None:
+    def __init__(self, run_name: str, resume: bool = False) -> None:
         self.game_config = load_game_config()
         self.training_config = self.game_config["training"]
         self.stop_event = threading.Event()
+        self.run_name = normalize_run_name(run_name)
         self.generation = 0
         self.best_fitness = 0.0
         self.best_pipes = 0
@@ -46,7 +49,7 @@ class NeatTrainer:
         self.population.add_reporter(
             neat.Checkpointer(
                 generation_interval=self.checkpoint_generation_interval,
-                filename_prefix=str(CHAMPION_PATH.parent / TRAINING_CHECKPOINT_PREFIX),
+                filename_prefix=training_checkpoint_prefix(self.run_name),
             )
         )
         self._bootstrap_champion_state()
@@ -74,7 +77,7 @@ class NeatTrainer:
         if not resume:
             return neat.Population(config)
 
-        checkpoint_path = latest_training_checkpoint()
+        checkpoint_path = latest_training_checkpoint(self.run_name)
         if checkpoint_path is None:
             return neat.Population(config)
 
@@ -83,19 +86,26 @@ class NeatTrainer:
         return neat.Checkpointer.restore_checkpoint(str(checkpoint_path))
 
     def _bootstrap_champion_state(self) -> None:
-        if champion_exists():
-            champion = load_champion()
+        if champion_exists(self.run_name):
+            champion = load_champion(self.run_name)
             self.best_fitness = float(champion.fitness or 0.0)
             self.best_genome_id = getattr(champion, "key", None)
 
-        metadata = load_champion_metadata()
-        if metadata is None:
+        metadata = load_champion_metadata(self.run_name)
+        if metadata is not None:
+            self.best_pipes = int(metadata.get("score", 0))
+            self.last_saved_generation = int(metadata.get("generation", 0))
+            self.last_checkpoint_path = str(metadata.get("checkpoint_path"))
             self.generation = self.population.generation
             return
 
-        self.best_pipes = int(metadata.get("score", 0))
-        self.last_saved_generation = int(metadata.get("generation", 0))
-        self.last_checkpoint_path = str(metadata.get("checkpoint_path", CHAMPION_PATH))
+        historical = latest_historical_champion(self.run_name)
+        if historical is not None:
+            checkpoint_path, generation, score = historical
+            self.best_pipes = score
+            self.last_saved_generation = generation
+            self.last_checkpoint_path = str(checkpoint_path)
+
         self.generation = self.population.generation
 
     def _eval_genomes(
@@ -149,6 +159,7 @@ class NeatTrainer:
             connection_manager.broadcast_state(
                 {
                     "type": "training_frame",
+                    "run_name": self.run_name,
                     "generation": self.generation,
                     "alive_count": world.alive_count,
                     "total_birds": len(world.birds),
@@ -157,8 +168,8 @@ class NeatTrainer:
                     "best_fitness": self.best_fitness,
                     "best_pipes": self.best_pipes,
                     "best_genome_id": self.best_genome_id,
-                    "champion_available": champion_exists(),
-                    "champion_path": str(CHAMPION_PATH),
+                    "champion_available": champion_exists(self.run_name),
+                    "champion_path": str(champion_path(self.run_name)),
                     "champion_saved_this_generation": False,
                     "last_saved_generation": self.last_saved_generation,
                     "last_checkpoint_path": self.last_checkpoint_path,
@@ -172,6 +183,7 @@ class NeatTrainer:
             and generation_best_fitness > self.best_fitness
         ):
             checkpoint_path = save_champion(
+                self.run_name,
                 generation_best_genome,
                 generation=self.generation,
                 score=generation_best_pipes,
@@ -184,6 +196,7 @@ class NeatTrainer:
             connection_manager.broadcast_state(
                 {
                     "type": "training_frame",
+                    "run_name": self.run_name,
                     "generation": self.generation,
                     "alive_count": world.alive_count,
                     "total_birds": len(world.birds),
@@ -193,7 +206,7 @@ class NeatTrainer:
                     "best_pipes": self.best_pipes,
                     "best_genome_id": self.best_genome_id,
                     "champion_available": True,
-                    "champion_path": str(CHAMPION_PATH),
+                    "champion_path": str(champion_path(self.run_name)),
                     "champion_saved_this_generation": True,
                     "last_saved_generation": self.last_saved_generation,
                     "last_checkpoint_path": self.last_checkpoint_path,

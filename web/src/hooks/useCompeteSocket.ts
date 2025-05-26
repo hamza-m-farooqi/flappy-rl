@@ -4,6 +4,7 @@ import type { GameState } from '../components/GameCanvas';
 
 export type CompeteFrame = GameState & {
   type: 'compete_frame';
+  run_name: string;
   human_bird: GameState['bird'];
   ai_bird: GameState['bird'];
   human_score: number;
@@ -11,16 +12,25 @@ export type CompeteFrame = GameState & {
   winner: 'human' | 'ai' | 'tie' | null;
 };
 
-export function useCompeteSocket() {
+export function useCompeteSocket(runName: string | null) {
   const socketRef = useRef<WebSocket | null>(null);
   const [frame, setFrame] = useState<CompeteFrame | null>(null);
-  const [status, setStatus] = useState<'connecting' | 'connected' | 'closed' | 'error'>(
-    'connecting',
+  const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'closed' | 'error'>(
+    runName ? 'connecting' : 'idle',
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const socket = new WebSocket(COMPETE_WS_URL);
+    if (!runName) {
+      setFrame(null);
+      setStatus('idle');
+      setErrorMessage(null);
+      return;
+    }
+
+    setStatus('connecting');
+    setErrorMessage(null);
+    const socket = new WebSocket(`${COMPETE_WS_URL}?run_name=${encodeURIComponent(runName)}`);
     socketRef.current = socket;
 
     socket.onopen = () => {
@@ -56,7 +66,7 @@ export function useCompeteSocket() {
       socket.close();
       socketRef.current = null;
     };
-  }, []);
+  }, [runName]);
 
   return {
     frame,
