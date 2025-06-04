@@ -3,6 +3,14 @@ import { useTrainingSocket } from '../hooks/useTrainingSocket';
 
 export function TrainingPage() {
   const { frame, status, errorMessage, trainingStatus } = useTrainingSocket();
+  const generationEndMessage =
+    frame?.generation_complete && frame.generation_end_reason
+      ? frame.generation_end_reason === 'frame_cap'
+        ? `Generation ${frame.generation} ended because it reached the frame cap. Training continues with the next generation.`
+        : frame.generation_end_reason === 'all_birds_dead'
+          ? `Generation ${frame.generation} ended because all birds died.`
+          : `Generation ${frame.generation} ended because training was stopped.`
+      : null;
 
   return (
     <section className="page page-training">
@@ -65,6 +73,7 @@ export function TrainingPage() {
               <code>{frame.last_checkpoint_path ?? frame.champion_path}</code>
             </p>
           ) : null}
+          {generationEndMessage ? <p className="status-banner">{generationEndMessage}</p> : null}
           <GameCanvas gameState={frame} />
         </>
       ) : null}

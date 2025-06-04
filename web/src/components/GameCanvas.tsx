@@ -50,6 +50,8 @@ export type TrainingFrame = GameState & {
   champion_available: boolean;
   champion_path: string;
   champion_saved_this_generation: boolean;
+  generation_complete: boolean;
+  generation_end_reason?: 'all_birds_dead' | 'frame_cap' | 'stopped' | null;
   last_saved_generation?: number | null;
   last_checkpoint_path?: string | null;
 };

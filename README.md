@@ -200,3 +200,9 @@ Frontend build:
 cd web
 npm run build
 ```
+
+Automated tests:
+
+```bash
+uv run pytest tests/test_physics.py tests/test_api.py
+```

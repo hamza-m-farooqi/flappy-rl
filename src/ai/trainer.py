@@ -130,6 +130,7 @@ class NeatTrainer:
         generation_best_genome_id: int | None = None
         generation_best_fitness = float("-inf")
         generation_best_pipes = 0
+        generation_end_reason: str | None = None
 
         while (
             world.alive_count > 0
@@ -171,12 +172,21 @@ class NeatTrainer:
                     "champion_available": champion_exists(self.run_name),
                     "champion_path": str(champion_path(self.run_name)),
                     "champion_saved_this_generation": False,
+                    "generation_complete": False,
+                    "generation_end_reason": None,
                     "last_saved_generation": self.last_saved_generation,
                     "last_checkpoint_path": self.last_checkpoint_path,
                     **world.serialize(),
                 }
             )
             time.sleep(frame_delay_ms / 1000)
+
+        if self.stop_event.is_set():
+            generation_end_reason = "stopped"
+        elif world.alive_count == 0:
+            generation_end_reason = "all_birds_dead"
+        elif world.frame_count >= max_frames:
+            generation_end_reason = "frame_cap"
 
         if (
             generation_best_genome is not None
@@ -208,6 +218,31 @@ class NeatTrainer:
                     "champion_available": True,
                     "champion_path": str(champion_path(self.run_name)),
                     "champion_saved_this_generation": True,
+                    "generation_complete": True,
+                    "generation_end_reason": generation_end_reason,
+                    "last_saved_generation": self.last_saved_generation,
+                    "last_checkpoint_path": self.last_checkpoint_path,
+                    **world.serialize(),
+                }
+            )
+        else:
+            connection_manager.broadcast_state(
+                {
+                    "type": "training_frame",
+                    "run_name": self.run_name,
+                    "generation": self.generation,
+                    "alive_count": world.alive_count,
+                    "total_birds": len(world.birds),
+                    "generation_best_fitness": generation_best_fitness,
+                    "generation_best_pipes": generation_best_pipes,
+                    "best_fitness": self.best_fitness,
+                    "best_pipes": self.best_pipes,
+                    "best_genome_id": self.best_genome_id,
+                    "champion_available": champion_exists(self.run_name),
+                    "champion_path": str(champion_path(self.run_name)),
+                    "champion_saved_this_generation": False,
+                    "generation_complete": True,
+                    "generation_end_reason": generation_end_reason,
                     "last_saved_generation": self.last_saved_generation,
                     "last_checkpoint_path": self.last_checkpoint_path,
                     **world.serialize(),
