@@ -27,6 +27,8 @@ const ADMIN_TOKEN_KEY = 'flappy_rl_admin_token';
 export function AdminPage() {
   const [password, setPassword] = useState('');
   const [trainingName, setTrainingName] = useState('');
+  const [popSize, setPopSize] = useState<string>('100');
+  const [mutationRate, setMutationRate] = useState<string>('0.8');
   const [status, setStatus] = useState<TrainingStatus | null>(null);
   const [requestState, setRequestState] = useState<'idle' | 'loading'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -101,7 +103,7 @@ export function AdminPage() {
     setErrorMessage(null);
   };
 
-  const runAction = async (path: string, payload?: { run_name: string }) => {
+  const runAction = async (path: string, payload?: { run_name: string; pop_size?: number; mutation_rate?: number }) => {
     if (!headers) {
       return;
     }
@@ -197,33 +199,72 @@ export function AdminPage() {
         </button>
       </div>
 
-      <div className="submit-panel">
-        <div className="submit-copy">
+      <div className="submit-panel" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div className="submit-copy" style={{ marginBottom: 0 }}>
           <h2>Start a new training run</h2>
-          <p>Each run gets its own folder under `checkpoints/`.</p>
+          <p>Each run gets its own folder under `checkpoints/`. Optional neat parameter overrides below.</p>
         </div>
-        <div className="submit-form">
-          <input
-            className="text-input"
-            value={trainingName}
-            onChange={(event) => setTrainingName(event.target.value)}
-            placeholder="spring-champion-run"
-            maxLength={64}
-          />
-          <button
-            className="action-button"
-            disabled={requestState === 'loading' || !trainingName.trim() || Boolean(status?.is_running)}
-            onClick={() => void runAction('/admin/training/start', { run_name: trainingName })}
-          >
-            Start New Run
-          </button>
-          <button
-            className="ghost-button"
-            disabled={requestState === 'loading' || !status?.is_running}
-            onClick={() => void runAction('/admin/training/stop')}
-          >
-            Stop Active Run
-          </button>
+        <div className="submit-form" style={{ display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'stretch' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label htmlFor="trainingName" style={{ fontSize: '13px', fontWeight: 600, color: '#4b5563' }}>Run Name</label>
+              <input
+                id="trainingName"
+                className="text-input"
+                value={trainingName}
+                onChange={(event) => setTrainingName(event.target.value)}
+                placeholder="spring-champion-run"
+                maxLength={64}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label htmlFor="popSize" style={{ fontSize: '13px', fontWeight: 600, color: '#4b5563' }}>Population Size (10-1000)</label>
+              <input
+                id="popSize"
+                type="number"
+                min="10"
+                max="1000"
+                className="text-input"
+                value={popSize}
+                onChange={(event) => setPopSize(event.target.value)}
+                placeholder="100"
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label htmlFor="mutationRate" style={{ fontSize: '13px', fontWeight: 600, color: '#4b5563' }}>Weight Mutation Rate (0.0-1.0)</label>
+              <input
+                id="mutationRate"
+                type="number"
+                step="0.01"
+                min="0"
+                max="1"
+                className="text-input"
+                value={mutationRate}
+                onChange={(event) => setMutationRate(event.target.value)}
+                placeholder="0.8"
+              />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button
+              className="action-button"
+              disabled={requestState === 'loading' || !trainingName.trim() || Boolean(status?.is_running)}
+              onClick={() => void runAction('/admin/training/start', {
+                run_name: trainingName,
+                pop_size: popSize ? parseInt(popSize, 10) : undefined,
+                mutation_rate: mutationRate ? parseFloat(mutationRate) : undefined,
+              })}
+            >
+              Start New Run
+            </button>
+            <button
+              className="ghost-button"
+              disabled={requestState === 'loading' || !status?.is_running}
+              onClick={() => void runAction('/admin/training/stop')}
+            >
+              Stop Active Run
+            </button>
+          </div>
         </div>
       </div>
 

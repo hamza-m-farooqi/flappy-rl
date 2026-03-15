@@ -21,6 +21,8 @@ class TrainingRequest(BaseModel):
     """Incoming admin request for starting or resuming a named training run."""
 
     run_name: str = Field(min_length=1, max_length=64)
+    pop_size: int | None = Field(default=None, ge=10, le=1000)
+    mutation_rate: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class LoginRequest(BaseModel):
@@ -47,9 +49,15 @@ async def get_training_status() -> dict[str, Any]:
 @router.post("/training/start", dependencies=[Depends(require_admin)])
 async def start_training(payload: TrainingRequest) -> dict[str, Any]:
     """Start a fresh named training run."""
+    overrides = {}
+    if payload.pop_size is not None:
+        overrides["pop_size"] = payload.pop_size
+    if payload.mutation_rate is not None:
+        overrides["weight_mutate_rate"] = payload.mutation_rate
+
     try:
         return training_manager.start(
-            normalize_run_name(payload.run_name), resume=False
+            normalize_run_name(payload.run_name), resume=False, overrides=overrides
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error

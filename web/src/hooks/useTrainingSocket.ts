@@ -8,6 +8,13 @@ type PublicTrainingStatus = {
   active_run_name: string | null;
 };
 
+export type GenerationStat = {
+  generation: number;
+  max_fitness: number;
+  avg_fitness: number;
+  species_count: number;
+};
+
 export function useTrainingSocket() {
   const [frame, setFrame] = useState<TrainingFrame | null>(null);
   const [status, setStatus] = useState<'connecting' | 'connected' | 'closed' | 'error'>(
@@ -15,6 +22,7 @@ export function useTrainingSocket() {
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [trainingStatus, setTrainingStatus] = useState<PublicTrainingStatus | null>(null);
+  const [statsHistory, setStatsHistory] = useState<GenerationStat[]>([]);
 
   useEffect(() => {
     const socket = new WebSocket(TRAINING_WS_URL);
@@ -43,6 +51,25 @@ export function useTrainingSocket() {
       try {
         const payload = JSON.parse(event.data) as TrainingFrame;
         setFrame(payload);
+
+        if (payload.generation_stats && payload.generation_stats.max_fitness !== null) {
+          setStatsHistory((prev) => {
+            const last = prev[prev.length - 1];
+            if (!last || last.generation !== payload.generation) {
+              return [
+                ...prev,
+                {
+                  generation: payload.generation,
+                  max_fitness: payload.generation_stats!.max_fitness!,
+                  avg_fitness: payload.generation_stats!.avg_fitness!,
+                  species_count: payload.generation_stats!.species_count,
+                },
+              ];
+            }
+            return prev;
+          });
+        }
+
       } catch (error) {
         setStatus('error');
         setErrorMessage(error instanceof Error ? error.message : 'Invalid training frame.');
@@ -66,5 +93,5 @@ export function useTrainingSocket() {
     };
   }, []);
 
-  return { frame, status, errorMessage, trainingStatus };
+  return { frame, status, errorMessage, trainingStatus, statsHistory };
 }

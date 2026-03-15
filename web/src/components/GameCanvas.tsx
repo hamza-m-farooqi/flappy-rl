@@ -54,6 +54,15 @@ export type TrainingFrame = GameState & {
   generation_end_reason?: 'all_birds_dead' | 'frame_cap' | 'stopped' | null;
   last_saved_generation?: number | null;
   last_checkpoint_path?: string | null;
+  generation_stats?: {
+    max_fitness: number | null;
+    avg_fitness: number | null;
+    species_count: number;
+  } | null;
+  best_network?: {
+    nodes: Array<{ id: number; type: 'input' | 'hidden' | 'output'; bias?: number; response?: number; activation?: string }>;
+    connections: Array<{ in: number; out: number; weight: number; enabled: boolean }>;
+  } | null;
 };
 
 type GameCanvasProps = {

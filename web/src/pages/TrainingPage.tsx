@@ -1,8 +1,10 @@
 import { GameCanvas } from '../components/GameCanvas';
+import { NetworkVisualizer } from '../components/NetworkVisualizer';
+import { MetricsDashboard } from '../components/MetricsDashboard';
 import { useTrainingSocket } from '../hooks/useTrainingSocket';
 
 export function TrainingPage() {
-  const { frame, status, errorMessage, trainingStatus } = useTrainingSocket();
+  const { frame, status, errorMessage, trainingStatus, statsHistory } = useTrainingSocket();
   const generationEndMessage =
     frame?.generation_complete && frame.generation_end_reason
       ? frame.generation_end_reason === 'frame_cap'
@@ -51,10 +53,24 @@ export function TrainingPage() {
           ) : null}
           {generationEndMessage ? <p className="status-banner">{generationEndMessage}</p> : null}
           <div className="content-grid">
-            <div className="canvas-panel">
+            <div className="canvas-panel" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
               <GameCanvas gameState={frame} />
+              <div className="table-card" style={{ padding: '16px', margin: 0, marginTop: '4px' }}>
+                <div className="table-header-copy">
+                  <h2 style={{ fontSize: '14px', marginBottom: '12px' }}>Generation Metrics</h2>
+                </div>
+                <MetricsDashboard statsHistory={statsHistory} />
+              </div>
             </div>
-            <div className="stats-panel">
+            <div className="stats-panel" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              {frame.best_network ? (
+                <div className="table-card" style={{ padding: '16px', margin: 0 }}>
+                  <div className="table-header-copy">
+                    <h2 style={{ fontSize: '14px', marginBottom: '12px' }}>Best Brain Topology</h2>
+                  </div>
+                  <NetworkVisualizer network={frame.best_network} width={300} height={180} />
+                </div>
+              ) : null}
               <div className="training-stats training-stats-compact">
                 <div className="stat-pill stat-pill-compact">
                   <span className="stat-label">Run</span>

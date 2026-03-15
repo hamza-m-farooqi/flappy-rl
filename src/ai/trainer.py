@@ -29,8 +29,9 @@ NEAT_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "n
 class NeatTrainer:
     """Run NEAT training and broadcast live swarm updates."""
 
-    def __init__(self, run_name: str, resume: bool = False) -> None:
+    def __init__(self, run_name: str, resume: bool = False, config_overrides: dict[str, Any] | None = None) -> None:
         self.game_config = load_game_config()
+        self.config_overrides = config_overrides or {}
         self.training_config = self.game_config["training"]
         self.stop_event = threading.Event()
         self.run_name = normalize_run_name(run_name)
@@ -44,8 +45,9 @@ class NeatTrainer:
             self.training_config.get("checkpoint_generation_interval", 5)
         )
         self.population = self._build_population(resume=resume)
+        self.stats_reporter = neat.StatisticsReporter()
         self.population.add_reporter(neat.StdOutReporter(False))
-        self.population.add_reporter(neat.StatisticsReporter())
+        self.population.add_reporter(self.stats_reporter)
         self.population.add_reporter(
             neat.Checkpointer(
                 generation_interval=self.checkpoint_generation_interval,
@@ -64,13 +66,18 @@ class NeatTrainer:
         self.stop_event.set()
 
     def _build_config(self) -> neat.Config:
-        return neat.Config(
+        config = neat.Config(
             neat.DefaultGenome,
             neat.DefaultReproduction,
             neat.DefaultSpeciesSet,
             neat.DefaultStagnation,
             str(NEAT_CONFIG_PATH),
         )
+        if "pop_size" in self.config_overrides:
+            config.pop_size = self.config_overrides["pop_size"]
+        if "weight_mutate_rate" in self.config_overrides:
+            config.genome_config.weight_mutate_rate = self.config_overrides["weight_mutate_rate"]
+        return config
 
     def _build_population(self, resume: bool) -> neat.Population:
         config = self._build_config()
@@ -132,6 +139,25 @@ class NeatTrainer:
         generation_best_pipes = 0
         generation_end_reason: str | None = None
 
+        # Pre-compute metrics from stats reporter for this generation
+        generation_stats = {
+            "max_fitness": None,
+            "avg_fitness": None,
+            "species_count": len(self.population.species.species) if self.population.species else 0,
+        }
+        if self.generation > 0 and self.stats_reporter.get_fitness_stat(max):
+            generation_stats["max_fitness"] = self.stats_reporter.get_fitness_stat(max)[-1]
+            generation_stats["avg_fitness"] = self.stats_reporter.get_fitness_mean()[-1]
+
+        def get_network_topology(genome):
+            if genome is None:
+                return None
+            nodes = [{"id": n_id, "type": "output" if n_id in config.genome_config.output_keys else "hidden", "bias": n.bias, "response": n.response, "activation": n.activation} for n_id, n in genome.nodes.items()]
+            for i_key in config.genome_config.input_keys:
+                nodes.append({"id": i_key, "type": "input"})
+            connections = [{"in": c.key[0], "out": c.key[1], "weight": c.weight, "enabled": c.enabled} for c_id, c in genome.connections.items()]
+            return {"nodes": nodes, "connections": connections}
+
         while (
             world.alive_count > 0
             and world.frame_count < max_frames
@@ -176,6 +202,8 @@ class NeatTrainer:
                     "generation_end_reason": None,
                     "last_saved_generation": self.last_saved_generation,
                     "last_checkpoint_path": self.last_checkpoint_path,
+                    "generation_stats": generation_stats,
+                    "best_network": get_network_topology(generation_best_genome),
                     **world.serialize(),
                 }
             )
@@ -222,6 +250,8 @@ class NeatTrainer:
                     "generation_end_reason": generation_end_reason,
                     "last_saved_generation": self.last_saved_generation,
                     "last_checkpoint_path": self.last_checkpoint_path,
+                    "generation_stats": generation_stats,
+                    "best_network": get_network_topology(generation_best_genome),
                     **world.serialize(),
                 }
             )
@@ -245,6 +275,8 @@ class NeatTrainer:
                     "generation_end_reason": generation_end_reason,
                     "last_saved_generation": self.last_saved_generation,
                     "last_checkpoint_path": self.last_checkpoint_path,
+                    "generation_stats": generation_stats,
+                    "best_network": get_network_topology(generation_best_genome),
                     **world.serialize(),
                 }
             )
