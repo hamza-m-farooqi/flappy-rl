@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/env';
 
@@ -37,26 +37,29 @@ export function AdminPage() {
     [token],
   );
 
-  const loadStatus = async (authToken = token) => {
-    if (!authToken) {
-      return;
-    }
-
-    try {
-      const response = await axios.get<TrainingStatus>(`${API_BASE_URL}/admin/training/status`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
-      setStatus(response.data);
-      setErrorMessage(null);
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        localStorage.removeItem(ADMIN_TOKEN_KEY);
-        setToken(null);
-        setStatus(null);
+  const loadStatus = useCallback(
+    async (authToken = token) => {
+      if (!authToken) {
+        return;
       }
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to load admin status.');
-    }
-  };
+
+      try {
+        const response = await axios.get<TrainingStatus>(`${API_BASE_URL}/admin/training/status`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        setStatus(response.data);
+        setErrorMessage(null);
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 401) {
+          localStorage.removeItem(ADMIN_TOKEN_KEY);
+          setToken(null);
+          setStatus(null);
+        }
+        setErrorMessage(error instanceof Error ? error.message : 'Unable to load admin status.');
+      }
+    },
+    [token],
+  );
 
   useEffect(() => {
     if (!token) {
@@ -71,7 +74,7 @@ export function AdminPage() {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [token]);
+  }, [loadStatus, token]);
 
   const login = async () => {
     try {
@@ -121,12 +124,17 @@ export function AdminPage() {
   if (!token) {
     return (
       <section className="page page-training">
-        <div className="training-copy">
-          <p className="eyebrow">Admin</p>
-          <h1>Admin Login</h1>
-          <p className="lede">
-            Enter the server-side admin password to manage named training runs.
-          </p>
+        <div className="page-heading">
+          <div className="heading-copy">
+            <p className="eyebrow">Admin</p>
+            <h1>Admin Login</h1>
+            <p className="lede">
+              Enter the server-side admin password to manage named training runs.
+            </p>
+          </div>
+          <div className="heading-side">
+            <span className="status-chip idle">Protected route</span>
+          </div>
         </div>
 
         {errorMessage ? <p className="status-banner error">{errorMessage}</p> : null}
@@ -155,22 +163,35 @@ export function AdminPage() {
 
   return (
     <section className="page page-training">
-      <div className="training-copy">
-        <p className="eyebrow">Admin</p>
-        <h1>Training Control</h1>
-        <p className="lede">
-          Protected browser controls for starting, resuming, and stopping one named
-          training run at a time.
-        </p>
+      <div className="page-heading">
+        <div className="heading-copy">
+          <p className="eyebrow">Admin</p>
+          <h1>Training Control</h1>
+          <p className="lede">
+            Protected browser controls for starting, resuming, and stopping one named
+            training run at a time.
+          </p>
+        </div>
+        <div className="heading-side">
+          <span className={`status-chip ${status?.is_running ? 'live' : 'idle'}`}>
+            {status?.is_running ? `Active: ${status.active_run_name}` : 'Trainer idle'}
+          </span>
+        </div>
       </div>
 
       {errorMessage ? <p className="status-banner error">{errorMessage}</p> : null}
 
       <div className="training-stats">
         <div className="stat-pill">
-          Trainer {status?.is_running ? `running (${status.active_run_name})` : 'idle'}
+          <span className="stat-label">Trainer</span>
+          <span className="stat-value">
+            {status?.is_running ? `Running (${status.active_run_name})` : 'Idle'}
+          </span>
         </div>
-        <div className="stat-pill">Runs discovered {status?.runs.length ?? 0}</div>
+        <div className="stat-pill">
+          <span className="stat-label">Runs discovered</span>
+          <span className="stat-value">{status?.runs.length ?? 0}</span>
+        </div>
         <button className="ghost-button small" onClick={logout}>
           Logout
         </button>
@@ -206,44 +227,52 @@ export function AdminPage() {
         </div>
       </div>
 
-      <div className="leaderboard-shell">
-        <div className="leaderboard-head leaderboard-row">
-          <span>Run</span>
-          <span>Champion</span>
-          <span>Best Score</span>
-          <span>Actions</span>
+      <div className="table-card">
+        <div className="table-header-copy">
+          <div>
+            <h2>Named runs</h2>
+            <p>Resume behavior, checkpoints, and trainer state stay wired to the existing admin endpoints.</p>
+          </div>
         </div>
-        {(status?.runs ?? []).map((run) => {
-          const isActiveRun = status?.is_running && status.active_run_name === run.run_name;
+        <div className="leaderboard-shell">
+          <div className="leaderboard-head leaderboard-row">
+            <span>Run</span>
+            <span>Champion</span>
+            <span>Best Score</span>
+            <span>Actions</span>
+          </div>
+          {(status?.runs ?? []).map((run) => {
+            const isActiveRun = status?.is_running && status.active_run_name === run.run_name;
 
-          return (
-            <div key={run.run_name} className="leaderboard-row">
-              <span>{run.run_name}</span>
-              <span>{run.has_champion ? `Gen ${run.last_saved_generation ?? '-'}` : 'No champion'}</span>
-              <span>{run.best_score ?? '-'}</span>
-              <span className="row-actions">
-                {isActiveRun ? (
-                  <span className="stat-pill">Running</span>
-                ) : (
-                  <button
-                    className="ghost-button small"
-                    disabled={
-                      requestState === 'loading' ||
-                      Boolean(status?.is_running) ||
-                      !run.has_training_checkpoint
-                    }
-                    onClick={() => void runAction('/admin/training/resume', { run_name: run.run_name })}
-                  >
-                    Resume
-                  </button>
-                )}
-              </span>
-            </div>
-          );
-        })}
-        {status && status.runs.length === 0 ? (
-          <p className="status-banner">No named training runs yet.</p>
-        ) : null}
+            return (
+              <div key={run.run_name} className="leaderboard-row">
+                <span className="row-emphasis">{run.run_name}</span>
+                <span>{run.has_champion ? `Gen ${run.last_saved_generation ?? '-'}` : 'No champion'}</span>
+                <span>{run.best_score ?? '-'}</span>
+                <span className="row-actions">
+                  {isActiveRun ? (
+                    <span className="status-chip live">Running</span>
+                  ) : (
+                    <button
+                      className="ghost-button small"
+                      disabled={
+                        requestState === 'loading' ||
+                        Boolean(status?.is_running) ||
+                        !run.has_training_checkpoint
+                      }
+                      onClick={() => void runAction('/admin/training/resume', { run_name: run.run_name })}
+                    >
+                      Resume
+                    </button>
+                  )}
+                </span>
+              </div>
+            );
+          })}
+          {status && status.runs.length === 0 ? (
+            <p className="status-banner">No named training runs yet.</p>
+          ) : null}
+        </div>
       </div>
     </section>
   );

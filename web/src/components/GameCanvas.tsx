@@ -118,7 +118,7 @@ export function GameCanvas({ gameState, overlayText }: GameCanvasProps) {
       context.font = 'bold 28px Georgia';
       context.fillText(overlayText ?? 'Game Over', screen_width / 2 - 78, 54);
     }
-  }, [gameState]);
+  }, [gameState, overlayText]);
 
   return (
     <div className="canvas-shell">

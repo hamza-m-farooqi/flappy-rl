@@ -14,13 +14,20 @@ export function TrainingPage() {
 
   return (
     <section className="page page-training">
-      <div className="training-copy">
-        <p className="eyebrow">Training</p>
-        <h1>Live Evolution Monitor</h1>
-        <p className="lede">
-          Watch the live training swarm over WebSocket as generations rise and the birds
-          learn to survive longer.
-        </p>
+      <div className="page-heading">
+        <div className="heading-copy">
+          <p className="eyebrow">Training</p>
+          <h1>Live Evolution Monitor</h1>
+          <p className="lede">
+            Watch the live training swarm over WebSocket as generations rise and the birds
+            learn to survive longer.
+          </p>
+        </div>
+        <div className="heading-side">
+          <span className={`status-chip ${status === 'connected' && trainingStatus?.is_running ? 'live' : 'idle'}`}>
+            {trainingStatus?.is_running ? `Run ${trainingStatus.active_run_name ?? 'active'}` : 'Trainer idle'}
+          </span>
+        </div>
       </div>
 
       {errorMessage ? <p className="status-banner error">{errorMessage}</p> : null}
@@ -36,37 +43,6 @@ export function TrainingPage() {
 
       {frame ? (
         <>
-          <div className="training-stats">
-            <div className="stat-pill">Run {frame.run_name}</div>
-            <div className="stat-pill">Generation {frame.generation}</div>
-            <div className="stat-pill">
-              Alive {frame.alive_count}/{frame.total_birds}
-            </div>
-            <div className="stat-pill">
-              Generation best score {frame.generation_best_pipes}
-            </div>
-            <div className="stat-pill">All-time best score {frame.best_pipes}</div>
-            <div className="stat-pill">
-              Generation fitness {Math.round(frame.generation_best_fitness)}
-            </div>
-            <div className="stat-pill">Champion fitness {Math.round(frame.best_fitness)}</div>
-            <div className="stat-pill">Frame {frame.frame}</div>
-            <div className="stat-pill">
-              {frame.champion_available ? 'Champion checkpoint ready' : 'No checkpoint yet'}
-            </div>
-            {frame.last_saved_generation ? (
-              <div className="stat-pill">
-                Best saved at generation {frame.last_saved_generation}
-              </div>
-            ) : null}
-            <div className="stat-pill">
-              {frame.generation_best_pipes > frame.best_pipes
-                ? 'Improving now'
-                : frame.generation_best_pipes === frame.best_pipes
-                  ? 'Matching best'
-                  : 'Below champion'}
-            </div>
-          </div>
           {frame.champion_saved_this_generation ? (
             <p className="status-banner success">
               Champion checkpoint updated. Snapshot saved to{' '}
@@ -74,7 +50,69 @@ export function TrainingPage() {
             </p>
           ) : null}
           {generationEndMessage ? <p className="status-banner">{generationEndMessage}</p> : null}
-          <GameCanvas gameState={frame} />
+          <div className="content-grid">
+            <div className="canvas-panel">
+              <GameCanvas gameState={frame} />
+            </div>
+            <div className="stats-panel">
+              <div className="training-stats training-stats-compact">
+                <div className="stat-pill stat-pill-compact">
+                  <span className="stat-label">Run</span>
+                  <span className="stat-value">{frame.run_name}</span>
+                </div>
+                <div className="stat-pill stat-pill-compact">
+                  <span className="stat-label">Generation</span>
+                  <span className="stat-value">{frame.generation}</span>
+                </div>
+                <div className="stat-pill stat-pill-compact">
+                  <span className="stat-label">Alive</span>
+                  <span className="stat-value">{frame.alive_count}/{frame.total_birds}</span>
+                </div>
+                <div className="stat-pill stat-pill-compact">
+                  <span className="stat-label">Generation best</span>
+                  <span className="stat-value">{frame.generation_best_pipes}</span>
+                </div>
+                <div className="stat-pill stat-pill-compact">
+                  <span className="stat-label">All-time best</span>
+                  <span className="stat-value">{frame.best_pipes}</span>
+                </div>
+                <div className="stat-pill stat-pill-compact">
+                  <span className="stat-label">Generation fitness</span>
+                  <span className="stat-value">{Math.round(frame.generation_best_fitness)}</span>
+                </div>
+                <div className="stat-pill stat-pill-compact">
+                  <span className="stat-label">Champion fitness</span>
+                  <span className="stat-value">{Math.round(frame.best_fitness)}</span>
+                </div>
+                <div className="stat-pill stat-pill-compact">
+                  <span className="stat-label">Frame</span>
+                  <span className="stat-value">{frame.frame}</span>
+                </div>
+                <div className="stat-pill stat-pill-compact">
+                  <span className="stat-label">Checkpoint</span>
+                  <span className="stat-value">
+                    {frame.champion_available ? 'Ready' : 'Not yet'}
+                  </span>
+                </div>
+                {frame.last_saved_generation ? (
+                  <div className="stat-pill stat-pill-compact">
+                    <span className="stat-label">Saved generation</span>
+                    <span className="stat-value">{frame.last_saved_generation}</span>
+                  </div>
+                ) : null}
+                <div className="stat-pill stat-pill-compact">
+                  <span className="stat-label">Trend</span>
+                  <span className="stat-value">
+                    {frame.generation_best_pipes > frame.best_pipes
+                      ? 'Improving'
+                      : frame.generation_best_pipes === frame.best_pipes
+                        ? 'Matching best'
+                        : 'Below champion'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
         </>
       ) : null}
     </section>
