@@ -43,3 +43,34 @@ def test_world_marks_bird_dead_when_colliding_with_pipe_box() -> None:
 
     assert state["game_over"] is True
     assert state["bird"]["alive"] is False
+
+
+def test_world_mode_affects_initial_gap_and_speed() -> None:
+    easy_world = World.from_config(mode="easy")
+    hard_world = World.from_config(mode="hard")
+    ultra_world = World.from_config(mode="ultra")
+
+    assert (
+        easy_world.current_pipe_speed
+        < hard_world.current_pipe_speed
+        < ultra_world.current_pipe_speed
+    )
+    assert (
+        easy_world.current_gap_size
+        > hard_world.current_gap_size
+        > ultra_world.current_gap_size
+    )
+
+
+def test_dynamic_modes_increase_difficulty_as_score_rises() -> None:
+    hard_world = World.from_config(mode="hard")
+    ultra_world = World.from_config(mode="ultra")
+
+    hard_initial_speed = hard_world.current_pipe_speed
+    ultra_initial_gap = ultra_world.current_gap_size
+
+    hard_world.score = 6
+    ultra_world.score = 8
+
+    assert hard_world.current_pipe_speed > hard_initial_speed
+    assert ultra_world.current_gap_size < ultra_initial_gap

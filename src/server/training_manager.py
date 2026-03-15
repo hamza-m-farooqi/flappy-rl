@@ -24,6 +24,7 @@ class TrainingManager:
         self,
         run_name: str,
         resume: bool,
+        mode: str | None = None,
         neat_overrides: dict[str, int | float] | None = None,
     ) -> dict[str, Any]:
         """Start a named training run if none is already active."""
@@ -36,6 +37,7 @@ class TrainingManager:
             trainer = NeatTrainer(
                 run_name=normalized_name,
                 resume=resume,
+                mode=mode,
                 neat_overrides=neat_overrides,
             )
             thread = threading.Thread(target=trainer.run, daemon=True)

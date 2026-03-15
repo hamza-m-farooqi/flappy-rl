@@ -4,8 +4,13 @@ export type GameState = {
   frame: number;
   score: number;
   game_over: boolean;
+  mode?: string;
   alive_count?: number;
   total_birds?: number;
+  difficulty?: {
+    pipe_speed: number;
+    gap_size: number;
+  };
   world: {
     screen_width: number;
     screen_height: number;

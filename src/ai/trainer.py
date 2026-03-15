@@ -14,8 +14,10 @@ from src.ai.genome_io import (
     latest_training_checkpoint,
     load_champion,
     load_champion_metadata,
+    load_run_metadata,
     normalize_run_name,
     save_champion,
+    save_run_metadata,
     training_checkpoint_prefix,
 )
 from src.ai.neat_runtime import (
@@ -24,7 +26,7 @@ from src.ai.neat_runtime import (
     serialize_network,
 )
 from src.ai.sensors import build_inputs
-from src.config import load_game_config
+from src.config import load_game_config, normalize_game_mode
 from src.game.world import World
 from src.server.ws_handler import connection_manager
 
@@ -39,13 +41,18 @@ class NeatTrainer:
         self,
         run_name: str,
         resume: bool = False,
+        mode: str | None = None,
         neat_overrides: dict[str, int | float] | None = None,
     ) -> None:
         self.game_config = load_game_config()
         self.training_config = self.game_config["training"]
         self.stop_event = threading.Event()
         self.run_name = normalize_run_name(run_name)
-        self.neat_overrides = neat_overrides or {}
+        self.mode = self._resolve_mode(mode=mode, resume=resume)
+        self.neat_overrides = self._resolve_neat_overrides(
+            neat_overrides=neat_overrides,
+            resume=resume,
+        )
         self.generation = 0
         self.best_fitness = 0.0
         self.best_pipes = 0
@@ -86,6 +93,11 @@ class NeatTrainer:
 
     def _build_population(self, resume: bool) -> neat.Population:
         config = self._build_config()
+        save_run_metadata(
+            self.run_name,
+            mode=self.mode,
+            neat_overrides=self.neat_overrides,
+        )
         if not resume:
             save_neat_overrides(
                 Path(training_checkpoint_prefix(self.run_name)).parent,
@@ -128,13 +140,38 @@ class NeatTrainer:
 
         self.generation = self.population.generation
 
+    def _resolve_mode(self, mode: str | None, resume: bool) -> str:
+        if not resume:
+            return normalize_game_mode(mode)
+
+        metadata = load_run_metadata(self.run_name)
+        if metadata is not None:
+            return normalize_game_mode(str(metadata.get("mode", "easy")))
+        return normalize_game_mode(mode)
+
+    def _resolve_neat_overrides(
+        self,
+        neat_overrides: dict[str, int | float] | None,
+        resume: bool,
+    ) -> dict[str, int | float]:
+        if neat_overrides:
+            return neat_overrides
+
+        if not resume:
+            return {}
+
+        metadata = load_run_metadata(self.run_name)
+        if metadata is None:
+            return {}
+        return dict(metadata.get("neat_overrides", {}))
+
     def _eval_genomes(
         self,
         genomes: list[tuple[int, neat.DefaultGenome]],
         config: neat.Config,
     ) -> None:
         self.generation = self.population.generation
-        world = World.from_config(population_size=len(genomes))
+        world = World.from_config(population_size=len(genomes), mode=self.mode)
         networks: dict[int, neat.nn.FeedForwardNetwork] = {}
         bird_by_genome_id = {}
 
@@ -290,6 +327,7 @@ class NeatTrainer:
             "type": "training_frame",
             "run_name": self.run_name,
             "generation": self.generation,
+            "mode": self.mode,
             "alive_count": world.alive_count,
             "total_birds": len(world.birds),
             "generation_best_fitness": generation_best_fitness,

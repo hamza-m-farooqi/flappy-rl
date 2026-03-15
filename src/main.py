@@ -39,12 +39,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=str,
         help="Named training run to start or resume when using --train.",
     )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="easy",
+        help="Game mode to use for human play or new training runs.",
+    )
     return parser
 
 
-def run_human_mode() -> None:
+def run_human_mode(mode: str) -> None:
     """Run the local Pygame loop for manual play."""
-    world = World.from_config()
+    world = World.from_config(mode=mode)
     renderer = PygameRenderer(world)
     clock = pygame.time.Clock()
     fps = int(world.world_config["fps"])
@@ -73,15 +79,19 @@ def run_api_server() -> None:
     uvicorn.run("src.server.app:app", host="0.0.0.0", port=8000, reload=False)
 
 
-def run_training(run_name: str, resume: bool = False) -> None:
+def run_training(run_name: str, resume: bool = False, mode: str = "easy") -> None:
     """Run headless NEAT training in the foreground."""
-    trainer = NeatTrainer(run_name=run_name, resume=resume)
+    trainer = NeatTrainer(run_name=run_name, resume=resume, mode=mode)
     trainer.run()
 
 
-def run_training_with_server(run_name: str, resume: bool = False) -> None:
+def run_training_with_server(
+    run_name: str,
+    resume: bool = False,
+    mode: str = "easy",
+) -> None:
     """Run the API server and background trainer together."""
-    trainer = NeatTrainer(run_name=run_name, resume=resume)
+    trainer = NeatTrainer(run_name=run_name, resume=resume, mode=mode)
     training_thread = threading.Thread(target=trainer.run, daemon=True)
     training_thread.start()
     run_api_server()
@@ -91,18 +101,22 @@ def main() -> None:
     """Dispatch to the selected local runtime mode."""
     args = build_parser().parse_args()
     if args.human:
-        run_human_mode()
+        run_human_mode(mode=args.mode)
         return
 
     if args.train and not args.run_name:
         raise SystemExit("--run-name is required when using --train.")
 
     if args.train and args.serve:
-        run_training_with_server(run_name=args.run_name, resume=args.resume)
+        run_training_with_server(
+            run_name=args.run_name,
+            resume=args.resume,
+            mode=args.mode,
+        )
         return
 
     if args.train:
-        run_training(run_name=args.run_name, resume=args.resume)
+        run_training(run_name=args.run_name, resume=args.resume, mode=args.mode)
         return
 
     run_api_server()

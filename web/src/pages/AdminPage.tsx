@@ -4,6 +4,7 @@ import { API_BASE_URL } from '../config/env';
 
 type RunSummary = {
   run_name: string;
+  mode: string;
   has_champion: boolean;
   has_training_checkpoint: boolean;
   best_score: number | null;
@@ -28,6 +29,11 @@ type TrainingStatus = {
   active_run_name: string | null;
   runs: RunSummary[];
   override_parameters: OverrideParameter[];
+  game_modes: Array<{
+    key: string;
+    label: string;
+    description: string;
+  }>;
 };
 
 type LoginResponse = {
@@ -40,6 +46,7 @@ const ADMIN_TOKEN_KEY = 'flappy_rl_admin_token';
 export function AdminPage() {
   const [password, setPassword] = useState('');
   const [trainingName, setTrainingName] = useState('');
+  const [trainingMode, setTrainingMode] = useState('easy');
   const [neatOverrides, setNeatOverrides] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<TrainingStatus | null>(null);
   const [requestState, setRequestState] = useState<'idle' | 'loading'>('idle');
@@ -117,7 +124,7 @@ export function AdminPage() {
 
   const runAction = async (
     path: string,
-    payload?: { run_name: string; neat_overrides?: Record<string, number> },
+    payload?: { run_name: string; mode?: string; neat_overrides?: Record<string, number> },
   ) => {
     if (!headers) {
       return;
@@ -130,6 +137,7 @@ export function AdminPage() {
       await loadStatus();
       if (path === '/admin/training/start') {
         setTrainingName('');
+        setTrainingMode('easy');
         setNeatOverrides({});
       }
     } catch (error) {
@@ -217,12 +225,24 @@ export function AdminPage() {
             placeholder="spring-champion-run"
             maxLength={64}
           />
+          <select
+            className="text-input mode-select"
+            value={trainingMode}
+            onChange={(event) => setTrainingMode(event.target.value)}
+          >
+            {(status?.game_modes ?? []).map((mode) => (
+              <option key={mode.key} value={mode.key}>
+                {mode.label}
+              </option>
+            ))}
+          </select>
           <button
             className="action-button"
             disabled={requestState === 'loading' || !trainingName.trim() || Boolean(status?.is_running)}
             onClick={() =>
               void runAction('/admin/training/start', {
                 run_name: trainingName,
+                mode: trainingMode,
                 neat_overrides: Object.fromEntries(
                   Object.entries(neatOverrides)
                     .filter(([, value]) => value.trim() !== '')
@@ -316,7 +336,11 @@ export function AdminPage() {
             return (
               <div key={run.run_name} className="leaderboard-row">
                 <span className="row-emphasis">{run.run_name}</span>
-                <span>{run.has_champion ? `Gen ${run.last_saved_generation ?? '-'}` : 'No champion'}</span>
+                <span>
+                  {run.has_champion
+                    ? `${run.mode} · Gen ${run.last_saved_generation ?? '-'}`
+                    : run.mode}
+                </span>
                 <span>{run.best_score ?? '-'}</span>
                 <span className="row-actions">
                   {isActiveRun ? (
@@ -355,7 +379,7 @@ export function AdminPage() {
           <div className="run-config-list">
             {status.runs.map((run) => (
               <article key={`${run.run_name}-config`} className="run-config-card">
-                <h3>{run.run_name}</h3>
+                <h3>{run.run_name} · {run.mode}</h3>
                 <p>
                   {Object.keys(run.neat_overrides).length > 0
                     ? Object.entries(run.neat_overrides)

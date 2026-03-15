@@ -2,15 +2,21 @@ import { useEffect, useRef, useState } from 'react';
 import {
   createInitialPlayState,
   jumpBird,
+  type GameMode,
   resetPlayState,
   stepPlayState,
   type PlayState,
 } from '../game/engine';
 
-export function usePlaySession() {
-  const [playState, setPlayState] = useState<PlayState>(() => createInitialPlayState());
+export function usePlaySession(mode: GameMode) {
+  const [playState, setPlayState] = useState<PlayState>(() => createInitialPlayState(mode));
   const [hasStarted, setHasStarted] = useState(false);
   const frameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setHasStarted(false);
+    setPlayState(createInitialPlayState(mode));
+  }, [mode]);
 
   useEffect(() => {
     let previousTick = performance.now();
@@ -59,7 +65,7 @@ export function usePlaySession() {
 
       if (event.code === 'KeyR') {
         setHasStarted(false);
-        setPlayState(resetPlayState());
+        setPlayState(resetPlayState(mode));
       }
     };
 
@@ -77,7 +83,7 @@ export function usePlaySession() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('pointerdown', handlePointerDown);
     };
-  }, [hasStarted]);
+  }, [hasStarted, mode]);
 
   return {
     hasStarted,
@@ -85,7 +91,7 @@ export function usePlaySession() {
     start: () => setHasStarted(true),
     restart: () => {
       setHasStarted(false);
-      setPlayState(resetPlayState());
+      setPlayState(resetPlayState(mode));
     },
   };
 }

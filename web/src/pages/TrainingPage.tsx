@@ -115,6 +115,10 @@ export function TrainingPage() {
                   <span className="stat-value">{frame.run_name}</span>
                 </div>
                 <div className="stat-pill stat-pill-compact">
+                  <span className="stat-label">Mode</span>
+                  <span className="stat-value">{frame.mode ?? 'easy'}</span>
+                </div>
+                <div className="stat-pill stat-pill-compact">
                   <span className="stat-label">Generation</span>
                   <span className="stat-value">{frame.generation}</span>
                 </div>

@@ -11,6 +11,7 @@ const NetworkGraph = lazy(async () => {
 
 type ChampionSummary = {
   run_name: string;
+  mode: string;
   best_score: number | null;
   best_fitness: number | null;
   last_saved_generation: number | null;
@@ -18,6 +19,7 @@ type ChampionSummary = {
 
 export function CompetePage() {
   const [champions, setChampions] = useState<ChampionSummary[]>([]);
+  const [modeFilter, setModeFilter] = useState('easy');
   const [selectedRunName, setSelectedRunName] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const { frame, status, errorMessage, jump, restart } = useCompeteSocket(selectedRunName);
@@ -128,18 +130,32 @@ export function CompetePage() {
             <h2>Champion catalog</h2>
             <p>Saved runs are unchanged; the table is just clearer and easier to scan.</p>
           </div>
+          <select
+            className="text-input mode-select"
+            value={modeFilter}
+            onChange={(event) => {
+              setModeFilter(event.target.value);
+              setSelectedRunName(null);
+            }}
+          >
+            <option value="easy">Easy</option>
+            <option value="hard">Hard</option>
+            <option value="ultra">Ultra</option>
+          </select>
         </div>
         <div className="leaderboard-shell">
           <div className="leaderboard-head leaderboard-row">
             <span>Champion</span>
-            <span>Best Score</span>
+            <span>Mode / Score</span>
             <span>Best Fitness</span>
             <span>Action</span>
           </div>
-          {champions.map((champion) => (
+          {champions
+            .filter((champion) => champion.mode === modeFilter)
+            .map((champion) => (
             <div key={champion.run_name} className="leaderboard-row">
               <span className="row-emphasis">{champion.run_name}</span>
-              <span>{champion.best_score ?? '-'}</span>
+              <span>{champion.best_score ?? '-'} · {champion.mode}</span>
               <span>{champion.best_fitness ? Math.round(champion.best_fitness) : '-'}</span>
               <span className="row-actions">
                 <button
@@ -151,9 +167,9 @@ export function CompetePage() {
               </span>
             </div>
           ))}
-          {champions.length === 0 && !loadError ? (
+          {champions.filter((champion) => champion.mode === modeFilter).length === 0 && !loadError ? (
             <p className="status-banner">
-              No champions are available yet. Finish a named training run first.
+              No {modeFilter} champions are available yet. Finish a named training run first.
             </p>
           ) : null}
         </div>
@@ -191,6 +207,10 @@ export function CompetePage() {
                   <div className="stat-pill stat-pill-compact">
                     <span className="stat-label">Selected run</span>
                     <span className="stat-value">{selectedRunName}</span>
+                  </div>
+                  <div className="stat-pill stat-pill-compact">
+                    <span className="stat-label">Mode</span>
+                    <span className="stat-value">{frame.mode ?? modeFilter}</span>
                   </div>
                   <div className="stat-pill stat-pill-compact">
                     <span className="stat-label">Race state</span>

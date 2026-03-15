@@ -1,3 +1,5 @@
+export type GameMode = 'easy' | 'hard' | 'ultra';
+
 export type PlayBird = {
   x: number;
   y: number;
@@ -19,6 +21,11 @@ export type PlayState = {
   frame: number;
   score: number;
   game_over: boolean;
+  mode: GameMode;
+  difficulty: {
+    pipe_speed: number;
+    gap_size: number;
+  };
   world: {
     screen_width: number;
     screen_height: number;
@@ -46,35 +53,92 @@ const CONFIG = {
   },
   pipes: {
     width: 72,
-    gap_size: 170,
-    speed: 3,
     spawn_interval: 90,
     start_offset: 320,
     min_gap_y: 140,
     max_gap_y: 380,
   },
+  modes: {
+    easy: {
+      base_pipe_speed: 3.0,
+      base_gap_size: 170,
+      dynamic_difficulty: false,
+      speed_increase_per_pipe: 0,
+      max_speed_bonus: 0,
+      gap_shrink_per_pipe: 0,
+      max_gap_shrink: 0,
+      min_gap_size: 170,
+    },
+    hard: {
+      base_pipe_speed: 3.35,
+      base_gap_size: 160,
+      dynamic_difficulty: true,
+      speed_increase_per_pipe: 0.12,
+      max_speed_bonus: 1.4,
+      gap_shrink_per_pipe: 4,
+      max_gap_shrink: 40,
+      min_gap_size: 120,
+    },
+    ultra: {
+      base_pipe_speed: 4.1,
+      base_gap_size: 148,
+      dynamic_difficulty: true,
+      speed_increase_per_pipe: 0.2,
+      max_speed_bonus: 2.4,
+      gap_shrink_per_pipe: 7,
+      max_gap_shrink: 68,
+      min_gap_size: 92,
+    },
+  },
 } as const;
+
+const MODE_LABELS: Record<GameMode, string> = {
+  easy: 'Easy',
+  hard: 'Hard',
+  ultra: 'Ultra',
+};
 
 function randomGapY() {
   const { min_gap_y, max_gap_y } = CONFIG.pipes;
   return min_gap_y + Math.random() * (max_gap_y - min_gap_y);
 }
 
-function spawnPipe(): PlayPipe {
+function currentPipeSpeed(mode: GameMode, score: number) {
+  const modeConfig = CONFIG.modes[mode];
+  const bonus = modeConfig.dynamic_difficulty
+    ? Math.min(score * modeConfig.speed_increase_per_pipe, modeConfig.max_speed_bonus)
+    : 0;
+  return modeConfig.base_pipe_speed + bonus;
+}
+
+function currentGapSize(mode: GameMode, score: number) {
+  const modeConfig = CONFIG.modes[mode];
+  const shrink = modeConfig.dynamic_difficulty
+    ? Math.min(score * modeConfig.gap_shrink_per_pipe, modeConfig.max_gap_shrink)
+    : 0;
+  return Math.max(modeConfig.base_gap_size - shrink, modeConfig.min_gap_size);
+}
+
+function spawnPipe(mode: GameMode, score: number): PlayPipe {
   return {
     x: CONFIG.world.screen_width + CONFIG.pipes.start_offset,
     width: CONFIG.pipes.width,
     gap_y: randomGapY(),
-    gap_size: CONFIG.pipes.gap_size,
+    gap_size: currentGapSize(mode, score),
     passed: false,
   };
 }
 
-export function createInitialPlayState(): PlayState {
+export function createInitialPlayState(mode: GameMode): PlayState {
   return {
     frame: 0,
     score: 0,
     game_over: false,
+    mode,
+    difficulty: {
+      pipe_speed: currentPipeSpeed(mode, 0),
+      gap_size: currentGapSize(mode, 0),
+    },
     world: { ...CONFIG.world },
     bird: {
       x: CONFIG.bird.start_x,
@@ -84,7 +148,7 @@ export function createInitialPlayState(): PlayState {
       alive: true,
       pipes_passed: 0,
     },
-    pipes: [spawnPipe()],
+    pipes: [spawnPipe(mode, 0)],
   };
 }
 
@@ -102,8 +166,8 @@ export function jumpBird(state: PlayState): PlayState {
   };
 }
 
-export function resetPlayState(): PlayState {
-  return createInitialPlayState();
+export function resetPlayState(mode: GameMode): PlayState {
+  return createInitialPlayState(mode);
 }
 
 export function stepPlayState(state: PlayState): PlayState {
@@ -111,18 +175,23 @@ export function stepPlayState(state: PlayState): PlayState {
     return state;
   }
 
+  const pipeSpeed = currentPipeSpeed(state.mode, state.score);
+  const nextVelocity = Math.min(
+    state.bird.velocity + CONFIG.bird.gravity,
+    CONFIG.bird.max_fall_speed,
+  );
   const nextBird: PlayBird = {
     ...state.bird,
-    velocity: Math.min(state.bird.velocity + CONFIG.bird.gravity, CONFIG.bird.max_fall_speed),
-    y: state.bird.y + Math.min(state.bird.velocity + CONFIG.bird.gravity, CONFIG.bird.max_fall_speed),
+    velocity: nextVelocity,
+    y: state.bird.y + nextVelocity,
   };
 
   const pipes = state.pipes
-    .map((pipe) => ({ ...pipe, x: pipe.x - CONFIG.pipes.speed }))
+    .map((pipe) => ({ ...pipe, x: pipe.x - pipeSpeed }))
     .filter((pipe) => pipe.x + pipe.width >= 0);
 
   if ((state.frame + 1) % CONFIG.pipes.spawn_interval === 0) {
-    pipes.push(spawnPipe());
+    pipes.push(spawnPipe(state.mode, state.score));
   }
 
   let score = state.score;
@@ -160,6 +229,10 @@ export function stepPlayState(state: PlayState): PlayState {
     frame: state.frame + 1,
     score,
     game_over: gameOver,
+    difficulty: {
+      pipe_speed: currentPipeSpeed(state.mode, score),
+      gap_size: currentGapSize(state.mode, score),
+    },
     bird: {
       ...nextBird,
       alive: !gameOver,
@@ -167,4 +240,11 @@ export function stepPlayState(state: PlayState): PlayState {
     },
     pipes,
   };
+}
+
+export function listGameModes() {
+  return (Object.keys(CONFIG.modes) as GameMode[]).map((key) => ({
+    key,
+    label: MODE_LABELS[key],
+  }));
 }

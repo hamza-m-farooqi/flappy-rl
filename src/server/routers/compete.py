@@ -12,6 +12,7 @@ from src.ai.genome_io import (
     list_available_champions,
     load_champion,
     normalize_run_name,
+    resolve_run_mode,
 )
 from src.ai.neat_runtime import (
     build_neat_config as build_runtime_neat_config,
@@ -58,7 +59,8 @@ async def compete_socket(
     config = build_neat_config()
     champion = load_champion(normalized_run_name)
     network = neat.nn.FeedForwardNetwork.create(champion, config)
-    world = World.from_config(population_size=2)
+    mode = resolve_run_mode(normalized_run_name)
+    world = World.from_config(population_size=2, mode=mode)
     human_bird = world.birds[0]
     human_bird.genome_id = "human"
     ai_bird = world.birds[1]
@@ -100,6 +102,7 @@ async def compete_socket(
                 "human_bird": state["birds"][0],
                 "ai_bird": state["birds"][1],
                 "run_name": normalized_run_name,
+                "mode": mode,
                 "has_started": has_started,
                 "human_score": world.birds[0].pipes_passed,
                 "ai_score": world.birds[1].pipes_passed,

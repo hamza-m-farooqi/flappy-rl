@@ -333,6 +333,33 @@ h1,
   gap: 10px;
 }
 
+.mode-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.mode-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.mode-chip.active {
+  background: var(--text);
+  border-color: var(--text);
+  color: #fff;
+}
+
 .hero-highlights,
 .bullet-list {
   margin: 0;
@@ -792,6 +819,11 @@ h1,
   background: #fff;
   color: var(--text);
   font-size: 0.9rem;
+}
+
+.mode-select {
+  flex: 0 0 150px;
+  min-width: 150px;
 }
 
 .text-input::placeholder {

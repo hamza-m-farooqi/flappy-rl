@@ -25,3 +25,39 @@ max_gap_y = 380
 max_frames_per_generation = 10000
 frame_delay_ms = 16
 checkpoint_generation_interval = 5
+
+[modes.easy]
+label = "Easy"
+description = "Classic flappy pacing with a stable gap and pipe speed."
+base_pipe_speed = 3.0
+base_gap_size = 170
+dynamic_difficulty = false
+speed_increase_per_pipe = 0.0
+max_speed_bonus = 0.0
+gap_shrink_per_pipe = 0
+max_gap_shrink = 0
+min_gap_size = 170
+
+[modes.hard]
+label = "Hard"
+description = "Difficulty ramps up as the run goes on with faster pipes and tighter gaps."
+base_pipe_speed = 3.35
+base_gap_size = 160
+dynamic_difficulty = true
+speed_increase_per_pipe = 0.12
+max_speed_bonus = 1.4
+gap_shrink_per_pipe = 4
+max_gap_shrink = 40
+min_gap_size = 120
+
+[modes.ultra]
+label = "Ultra"
+description = "Aggressive difficulty scaling with very fast pipes and sharply shrinking gaps."
+base_pipe_speed = 4.1
+base_gap_size = 148
+dynamic_difficulty = true
+speed_increase_per_pipe = 0.2
+max_speed_bonus = 2.4
+gap_shrink_per_pipe = 7
+max_gap_shrink = 68
+min_gap_size = 92

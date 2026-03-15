@@ -4,7 +4,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.config import load_game_config
+from src.config import load_game_config, normalize_game_mode
 from src.game.bird import Bird
 from src.game.pipe import Pipe
 
@@ -14,6 +14,7 @@ class World:
     """Manage bird state, pipes, scoring, and collision checks."""
 
     config: dict[str, Any]
+    mode: str = "easy"
     population_size: int = 1
     rng: random.Random = field(default_factory=random.Random)
     frame_count: int = 0
@@ -26,12 +27,18 @@ class World:
         self.world_config = self.config["world"]
         self.bird_config = self.config["bird"]
         self.pipe_config = self.config["pipes"]
+        self.mode = normalize_game_mode(self.mode)
+        self.mode_config = self.config["modes"][self.mode]
         self.reset()
 
     @classmethod
-    def from_config(cls, population_size: int = 1) -> World:
+    def from_config(cls, population_size: int = 1, mode: str = "easy") -> World:
         """Create a world using the shared game configuration file."""
-        return cls(config=load_game_config(), population_size=population_size)
+        return cls(
+            config=load_game_config(),
+            mode=mode,
+            population_size=population_size,
+        )
 
     def reset(self) -> None:
         """Reset the world to its starting state."""
@@ -65,7 +72,7 @@ class World:
             )
 
         for pipe in self.pipes:
-            pipe.update(speed=float(self.pipe_config["speed"]))
+            pipe.update(speed=self.current_pipe_speed)
 
         self._spawn_pipe_if_needed()
         self._remove_offscreen_pipes()
@@ -79,10 +86,15 @@ class World:
             "frame": self.frame_count,
             "score": self.score,
             "game_over": self.game_over,
+            "mode": self.mode,
             "world": {
                 "screen_width": int(self.world_config["screen_width"]),
                 "screen_height": int(self.world_config["screen_height"]),
                 "ground_height": int(self.world_config["ground_height"]),
+            },
+            "difficulty": {
+                "pipe_speed": self.current_pipe_speed,
+                "gap_size": self.current_gap_size,
             },
             "bird": {
                 "x": self.bird.x,
@@ -128,7 +140,7 @@ class World:
             x=screen_width + start_offset,
             gap_y=gap_y,
             width=int(self.pipe_config["width"]),
-            gap_size=int(self.pipe_config["gap_size"]),
+            gap_size=int(round(self.current_gap_size)),
         )
 
     def _spawn_pipe_if_needed(self) -> None:
@@ -208,3 +220,36 @@ class World:
             if pipe.right >= x_position:
                 return pipe
         return None
+
+    @property
+    def current_pipe_speed(self) -> float:
+        """Return the current pipe speed for the selected mode."""
+        base_speed = float(
+            self.mode_config.get("base_pipe_speed", self.pipe_config["speed"])
+        )
+        if not bool(self.mode_config.get("dynamic_difficulty", False)):
+            return base_speed
+
+        bonus = min(
+            self.score * float(self.mode_config.get("speed_increase_per_pipe", 0.0)),
+            float(self.mode_config.get("max_speed_bonus", 0.0)),
+        )
+        return base_speed + bonus
+
+    @property
+    def current_gap_size(self) -> float:
+        """Return the current pipe gap size for the selected mode."""
+        base_gap = float(
+            self.mode_config.get("base_gap_size", self.pipe_config["gap_size"])
+        )
+        if not bool(self.mode_config.get("dynamic_difficulty", False)):
+            return base_gap
+
+        shrink = min(
+            self.score * float(self.mode_config.get("gap_shrink_per_pipe", 0.0)),
+            float(self.mode_config.get("max_gap_shrink", 0.0)),
+        )
+        return max(
+            base_gap - shrink,
+            float(self.mode_config.get("min_gap_size", base_gap)),
+        )

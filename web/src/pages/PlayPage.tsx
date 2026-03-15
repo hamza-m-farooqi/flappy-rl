@@ -2,10 +2,12 @@ import { useState } from 'react';
 import axios from 'axios';
 import { GameCanvas } from '../components/GameCanvas';
 import { API_BASE_URL } from '../config/env';
+import { listGameModes, type GameMode } from '../game/engine';
 import { usePlaySession } from '../hooks/usePlaySession';
 
 export function PlayPage() {
-  const { hasStarted, playState, restart } = usePlaySession();
+  const [mode, setMode] = useState<GameMode>('easy');
+  const { hasStarted, playState, restart } = usePlaySession(mode);
   const [username, setUsername] = useState('');
   const [submitState, setSubmitState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -50,6 +52,18 @@ export function PlayPage() {
 
       <div className="content-grid">
         <div className="canvas-panel">
+          <div className="mode-switcher">
+            {listGameModes().map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                className={option.key === mode ? 'mode-chip active' : 'mode-chip'}
+                onClick={() => setMode(option.key)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
           <GameCanvas
             gameState={playState}
             overlayText={playState.game_over ? 'Game Over' : !hasStarted ? 'Press Space To Start' : undefined}
@@ -59,12 +73,20 @@ export function PlayPage() {
         <div className="stats-panel">
           <div className="training-stats">
             <div className="stat-pill">
+              <span className="stat-label">Mode</span>
+              <span className="stat-value">{mode}</span>
+            </div>
+            <div className="stat-pill">
               <span className="stat-label">Score</span>
               <span className="stat-value">{playState.score}</span>
             </div>
             <div className="stat-pill">
-              <span className="stat-label">Frame</span>
-              <span className="stat-value">{playState.frame}</span>
+              <span className="stat-label">Pipe speed</span>
+              <span className="stat-value">{playState.difficulty.pipe_speed.toFixed(2)}</span>
+            </div>
+            <div className="stat-pill">
+              <span className="stat-label">Gap size</span>
+              <span className="stat-value">{Math.round(playState.difficulty.gap_size)}</span>
             </div>
             <div className="stat-pill">
               <span className="stat-label">State</span>

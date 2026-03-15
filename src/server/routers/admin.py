@@ -10,6 +10,7 @@ from src.ai.neat_runtime import (
     normalize_neat_overrides,
     override_parameter_catalog,
 )
+from src.config import list_game_modes, normalize_game_mode
 from src.server.auth import (
     authenticate_admin_password,
     create_admin_token,
@@ -25,6 +26,7 @@ class TrainingRequest(BaseModel):
     """Incoming admin request for starting or resuming a named training run."""
 
     run_name: str = Field(min_length=1, max_length=64)
+    mode: str = Field(default="easy", min_length=1, max_length=32)
     neat_overrides: dict[str, int | float] = Field(default_factory=dict)
 
 
@@ -48,6 +50,7 @@ async def get_training_status() -> dict[str, Any]:
     """Return the active training status and discovered named runs."""
     status = training_manager.status()
     status["override_parameters"] = override_parameter_catalog()
+    status["game_modes"] = list_game_modes()
     return status
 
 
@@ -58,6 +61,7 @@ async def start_training(payload: TrainingRequest) -> dict[str, Any]:
         return training_manager.start(
             normalize_run_name(payload.run_name),
             resume=False,
+            mode=normalize_game_mode(payload.mode),
             neat_overrides=normalize_neat_overrides(payload.neat_overrides),
         )
     except ValueError as error:

@@ -9,6 +9,7 @@ from typing import Any
 import neat
 
 from src.ai.neat_runtime import load_neat_overrides
+from src.config import normalize_game_mode
 
 
 CHECKPOINTS_DIR = Path(__file__).resolve().parent.parent.parent / "checkpoints"
@@ -42,6 +43,11 @@ def champion_metadata_path(run_name: str) -> Path:
     return run_dir(run_name) / "champion.json"
 
 
+def run_metadata_path(run_name: str) -> Path:
+    """Return the run metadata path for a named run."""
+    return run_dir(run_name) / "run.json"
+
+
 def training_checkpoint_prefix(run_name: str) -> str:
     """Return the full training checkpoint filename prefix for a named run."""
     return str(run_dir(run_name) / TRAINING_CHECKPOINT_PREFIX)
@@ -52,6 +58,39 @@ def ensure_run_dir(run_name: str) -> Path:
     directory = run_dir(run_name)
     directory.mkdir(parents=True, exist_ok=True)
     return directory
+
+
+def save_run_metadata(
+    run_name: str,
+    mode: str,
+    neat_overrides: dict[str, int | float] | None = None,
+) -> Path:
+    """Persist metadata describing the training run itself."""
+    ensure_run_dir(run_name)
+    path = run_metadata_path(run_name)
+    payload = {
+        "run_name": normalize_run_name(run_name),
+        "mode": normalize_game_mode(mode),
+        "neat_overrides": neat_overrides or {},
+    }
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return path
+
+
+def load_run_metadata(run_name: str) -> dict[str, Any] | None:
+    """Return run metadata for a named training run, if present."""
+    metadata_path = run_metadata_path(run_name)
+    if not metadata_path.exists():
+        return None
+    return json.loads(metadata_path.read_text(encoding="utf-8"))
+
+
+def resolve_run_mode(run_name: str) -> str:
+    """Return the persisted mode for a run, defaulting to easy if unknown."""
+    metadata = load_run_metadata(run_name)
+    if metadata is None:
+        return "easy"
+    return normalize_game_mode(str(metadata.get("mode", "easy")))
 
 
 def save_champion(
@@ -76,6 +115,7 @@ def save_champion(
         json.dumps(
             {
                 "run_name": normalize_run_name(run_name),
+                "mode": resolve_run_mode(run_name),
                 "generation": generation,
                 "score": score,
                 "fitness": float(genome.fitness or 0.0),
@@ -135,13 +175,17 @@ def list_training_runs() -> list[dict[str, Any]]:
     ):
         run_name = directory.name
         metadata = load_champion_metadata(run_name)
+        run_metadata = load_run_metadata(run_name) or {}
         runs.append(
             {
                 "run_name": run_name,
+                "mode": normalize_game_mode(str(run_metadata.get("mode", "easy"))),
                 "has_champion": champion_exists(run_name),
                 "has_training_checkpoint": latest_training_checkpoint(run_name)
                 is not None,
-                "neat_overrides": load_neat_overrides(directory),
+                "neat_overrides": run_metadata.get(
+                    "neat_overrides", load_neat_overrides(directory)
+                ),
                 "best_score": int(metadata["score"]) if metadata else None,
                 "best_fitness": float(metadata["fitness"]) if metadata else None,
                 "last_saved_generation": int(metadata["generation"])
