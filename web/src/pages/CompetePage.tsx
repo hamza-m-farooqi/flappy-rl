@@ -1,8 +1,13 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import axios from 'axios';
 import { GameCanvas } from '../components/GameCanvas';
 import { API_BASE_URL } from '../config/env';
 import { useCompeteSocket } from '../hooks/useCompeteSocket';
+
+const NetworkGraph = lazy(async () => {
+  const module = await import('../components/NetworkGraph');
+  return { default: module.NetworkGraph };
+});
 
 type ChampionSummary = {
   run_name: string;
@@ -15,7 +20,7 @@ export function CompetePage() {
   const [champions, setChampions] = useState<ChampionSummary[]>([]);
   const [selectedRunName, setSelectedRunName] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const { frame, status, errorMessage } = useCompeteSocket(selectedRunName);
+  const { frame, status, errorMessage, jump, restart } = useCompeteSocket(selectedRunName);
 
   useEffect(() => {
     let active = true;
@@ -46,6 +51,50 @@ export function CompetePage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!selectedRunName) {
+      return;
+    }
+
+    const isEditableTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) {
+        return false;
+      }
+
+      const tagName = target.tagName;
+      return (
+        target.isContentEditable ||
+        tagName === 'INPUT' ||
+        tagName === 'TEXTAREA' ||
+        tagName === 'SELECT'
+      );
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isEditableTarget(event.target)) {
+        return;
+      }
+
+      if (event.code === 'Space') {
+        event.preventDefault();
+        jump();
+      }
+
+      if (event.code === 'KeyR') {
+        restart();
+      }
+    };
+
+    const handlePointerDown = () => jump();
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('pointerdown', handlePointerDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, [jump, restart, selectedRunName]);
+
   return (
     <section className="page page-training">
       <div className="page-heading">
@@ -59,7 +108,13 @@ export function CompetePage() {
         </div>
         <div className="heading-side">
           <span className={`status-chip ${status === 'connected' ? 'live' : 'idle'}`}>
-            {status === 'connected' ? 'Race live' : selectedRunName ? 'Preparing race' : 'Awaiting champion'}
+            {status === 'connected'
+              ? frame?.has_started
+                ? 'Race live'
+                : 'Ready to start'
+              : selectedRunName
+                ? 'Preparing race'
+                : 'Awaiting champion'}
           </span>
         </div>
       </div>
@@ -107,7 +162,7 @@ export function CompetePage() {
       {selectedRunName ? (
         <>
           {frame ? (
-            <div className="content-grid">
+            <div className="compete-layout">
               <div className="canvas-panel">
                 <GameCanvas
                   gameState={{
@@ -118,7 +173,9 @@ export function CompetePage() {
                     ],
                   }}
                   overlayText={
-                    frame.winner
+                    !frame.has_started
+                      ? 'Press Space To Start'
+                      : frame.winner
                       ? frame.winner === 'human'
                         ? 'You Won'
                         : frame.winner === 'ai'
@@ -127,7 +184,6 @@ export function CompetePage() {
                       : undefined
                   }
                 />
-
               </div>
 
               <div className="stats-panel">
@@ -142,7 +198,9 @@ export function CompetePage() {
                       {status === 'connecting'
                         ? 'Connecting'
                         : status === 'connected'
-                          ? 'Live'
+                          ? frame?.has_started
+                            ? 'Live'
+                            : 'Waiting'
                           : status === 'closed'
                             ? 'Closed'
                             : status === 'error'
@@ -182,7 +240,9 @@ export function CompetePage() {
                     <div className="stat-pill stat-pill-compact">
                       <span className="stat-label">Result</span>
                       <span className="stat-value">
-                        {frame.winner
+                        {!frame.has_started
+                          ? 'Waiting for start'
+                          : frame.winner
                           ? frame.winner === 'human'
                             ? 'You won'
                             : frame.winner === 'ai'
@@ -195,6 +255,9 @@ export function CompetePage() {
                 </div>
 
                 <div className="quick-actions">
+                  <button className="action-button" onClick={restart}>
+                    Restart Race
+                  </button>
                   <button className="ghost-button" onClick={() => setSelectedRunName(null)}>
                     Change Champion
                   </button>
@@ -211,6 +274,15 @@ export function CompetePage() {
                   <li>Press <code>R</code> to reset at any time.</li>
                   <li>Tap or click during a live run for pointer-based jumps.</li>
                 </ul>
+              </div>
+
+              <div className="table-card compete-network-card">
+                <Suspense fallback={<div className="network-empty"><p>Loading network...</p></div>}>
+                  <NetworkGraph
+                    network={frame.focus_network}
+                    title={`${selectedRunName} Champion Network`}
+                  />
+                </Suspense>
               </div>
             </div>
           ) : (

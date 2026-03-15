@@ -6,6 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from src.ai.genome_io import list_available_champions, normalize_run_name
+from src.ai.neat_runtime import (
+    normalize_neat_overrides,
+    override_parameter_catalog,
+)
 from src.server.auth import (
     authenticate_admin_password,
     create_admin_token,
@@ -21,6 +25,7 @@ class TrainingRequest(BaseModel):
     """Incoming admin request for starting or resuming a named training run."""
 
     run_name: str = Field(min_length=1, max_length=64)
+    neat_overrides: dict[str, int | float] = Field(default_factory=dict)
 
 
 class LoginRequest(BaseModel):
@@ -41,7 +46,9 @@ async def login(payload: LoginRequest) -> dict[str, str]:
 @router.get("/training/status", dependencies=[Depends(require_admin)])
 async def get_training_status() -> dict[str, Any]:
     """Return the active training status and discovered named runs."""
-    return training_manager.status()
+    status = training_manager.status()
+    status["override_parameters"] = override_parameter_catalog()
+    return status
 
 
 @router.post("/training/start", dependencies=[Depends(require_admin)])
@@ -49,7 +56,9 @@ async def start_training(payload: TrainingRequest) -> dict[str, Any]:
     """Start a fresh named training run."""
     try:
         return training_manager.start(
-            normalize_run_name(payload.run_name), resume=False
+            normalize_run_name(payload.run_name),
+            resume=False,
+            neat_overrides=normalize_neat_overrides(payload.neat_overrides),
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -61,7 +70,10 @@ async def start_training(payload: TrainingRequest) -> dict[str, Any]:
 async def resume_training(payload: TrainingRequest) -> dict[str, Any]:
     """Resume the latest population checkpoint for a named training run."""
     try:
-        return training_manager.start(normalize_run_name(payload.run_name), resume=True)
+        return training_manager.start(
+            normalize_run_name(payload.run_name),
+            resume=True,
+        )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except RuntimeError as error:

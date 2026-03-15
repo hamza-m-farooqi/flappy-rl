@@ -36,6 +36,45 @@ export type GameState = {
   }>;
 };
 
+export type TrainingHistoryPoint = {
+  generation: number;
+  max_fitness: number;
+  avg_fitness: number;
+  species_count: number;
+  best_pipes: number;
+};
+
+export type NetworkNode = {
+  id: number;
+  label: string;
+  type: 'input' | 'hidden' | 'output';
+  layer: number;
+  bias: number;
+  response: number;
+  activation: string;
+  value: number;
+};
+
+export type NetworkConnection = {
+  in: number;
+  out: number;
+  weight: number;
+  enabled: boolean;
+  innovation: number;
+  signal: number;
+};
+
+export type NetworkGraphData = {
+  nodes: NetworkNode[];
+  connections: NetworkConnection[];
+  stats: {
+    node_count: number;
+    connection_count: number;
+    hidden_count: number;
+    layer_count: number;
+  };
+};
+
 export type TrainingFrame = GameState & {
   type: 'training_frame';
   run_name: string;
@@ -43,10 +82,13 @@ export type TrainingFrame = GameState & {
   alive_count: number;
   total_birds: number;
   generation_best_fitness: number;
+  generation_average_fitness: number;
   generation_best_pipes: number;
   best_fitness: number;
   best_pipes: number;
   best_genome_id?: number | null;
+  species_count: number;
+  history?: TrainingHistoryPoint[];
   champion_available: boolean;
   champion_path: string;
   champion_saved_this_generation: boolean;
@@ -54,6 +96,7 @@ export type TrainingFrame = GameState & {
   generation_end_reason?: 'all_birds_dead' | 'frame_cap' | 'stopped' | null;
   last_saved_generation?: number | null;
   last_checkpoint_path?: string | null;
+  focus_network?: NetworkGraphData | null;
 };
 
 type GameCanvasProps = {

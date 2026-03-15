@@ -8,6 +8,8 @@ from typing import Any
 
 import neat
 
+from src.ai.neat_runtime import load_neat_overrides
+
 
 CHECKPOINTS_DIR = Path(__file__).resolve().parent.parent.parent / "checkpoints"
 TRAINING_CHECKPOINT_PREFIX = "neat-checkpoint-"
@@ -139,6 +141,7 @@ def list_training_runs() -> list[dict[str, Any]]:
                 "has_champion": champion_exists(run_name),
                 "has_training_checkpoint": latest_training_checkpoint(run_name)
                 is not None,
+                "neat_overrides": load_neat_overrides(directory),
                 "best_score": int(metadata["score"]) if metadata else None,
                 "best_fitness": float(metadata["fitness"]) if metadata else None,
                 "last_saved_generation": int(metadata["generation"])

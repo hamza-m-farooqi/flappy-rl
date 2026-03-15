@@ -9,7 +9,8 @@ type PublicTrainingStatus = {
 };
 
 export function useTrainingSocket() {
-  const [frame, setFrame] = useState<TrainingFrame | null>(null);
+  const [liveFrame, setLiveFrame] = useState<TrainingFrame | null>(null);
+  const [uiFrame, setUiFrame] = useState<TrainingFrame | null>(null);
   const [status, setStatus] = useState<'connecting' | 'connected' | 'closed' | 'error'>(
     'connecting',
   );
@@ -19,6 +20,7 @@ export function useTrainingSocket() {
   useEffect(() => {
     const socket = new WebSocket(TRAINING_WS_URL);
     let pollId: number | null = null;
+    let lastUiUpdateAt = 0;
 
     const loadTrainingStatus = async () => {
       try {
@@ -42,7 +44,17 @@ export function useTrainingSocket() {
     socket.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data) as TrainingFrame;
-        setFrame(payload);
+        setLiveFrame(payload);
+
+        const now = performance.now();
+        if (
+          payload.generation_complete ||
+          payload.champion_saved_this_generation ||
+          now - lastUiUpdateAt >= 180
+        ) {
+          lastUiUpdateAt = now;
+          setUiFrame(payload);
+        }
       } catch (error) {
         setStatus('error');
         setErrorMessage(error instanceof Error ? error.message : 'Invalid training frame.');
@@ -66,5 +78,5 @@ export function useTrainingSocket() {
     };
   }, []);
 
-  return { frame, status, errorMessage, trainingStatus };
+  return { liveFrame, uiFrame, status, errorMessage, trainingStatus };
 }

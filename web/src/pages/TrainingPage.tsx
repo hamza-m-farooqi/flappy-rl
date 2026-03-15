@@ -1,8 +1,62 @@
-import { GameCanvas } from '../components/GameCanvas';
+import { Suspense, lazy, startTransition, useEffect, useRef, useState } from 'react';
+import { GameCanvas, type NetworkGraphData, type TrainingHistoryPoint } from '../components/GameCanvas';
 import { useTrainingSocket } from '../hooks/useTrainingSocket';
 
+const MetricsChart = lazy(async () => {
+  const module = await import('../components/MetricsChart');
+  return { default: module.MetricsChart };
+});
+
+const NetworkGraph = lazy(async () => {
+  const module = await import('../components/NetworkGraph');
+  return { default: module.NetworkGraph };
+});
+
 export function TrainingPage() {
-  const { frame, status, errorMessage, trainingStatus } = useTrainingSocket();
+  const { liveFrame, uiFrame, status, errorMessage, trainingStatus } = useTrainingSocket();
+  const [insightHistory, setInsightHistory] = useState<TrainingHistoryPoint[]>([]);
+  const [insightNetwork, setInsightNetwork] = useState<NetworkGraphData | null>(null);
+  const [showMetrics, setShowMetrics] = useState(false);
+  const [showNetwork, setShowNetwork] = useState(false);
+  const lastHistoryLengthRef = useRef(0);
+  const lastNetworkFrameRef = useRef(-1);
+  const frame = uiFrame ?? liveFrame;
+
+  useEffect(() => {
+    if (!uiFrame) {
+      return;
+    }
+
+    const history = uiFrame.history;
+
+    if (
+      history &&
+      (
+        history.length !== lastHistoryLengthRef.current ||
+        uiFrame.generation_complete
+      )
+    ) {
+      lastHistoryLengthRef.current = history.length;
+      startTransition(() => {
+        setInsightHistory(history);
+      });
+    }
+
+    if (
+      uiFrame.focus_network &&
+      (
+        uiFrame.generation_complete ||
+        uiFrame.champion_saved_this_generation ||
+        uiFrame.frame - lastNetworkFrameRef.current >= 10
+      )
+    ) {
+      lastNetworkFrameRef.current = uiFrame.frame;
+      startTransition(() => {
+        setInsightNetwork(uiFrame.focus_network ?? null);
+      });
+    }
+  }, [uiFrame]);
+
   const generationEndMessage =
     frame?.generation_complete && frame.generation_end_reason
       ? frame.generation_end_reason === 'frame_cap'
@@ -31,7 +85,7 @@ export function TrainingPage() {
       </div>
 
       {errorMessage ? <p className="status-banner error">{errorMessage}</p> : null}
-      {!frame && !errorMessage ? (
+      {!liveFrame && !errorMessage ? (
         <p className="status-banner">
           {status === 'connecting'
             ? 'Connecting to live training stream...'
@@ -41,7 +95,7 @@ export function TrainingPage() {
         </p>
       ) : null}
 
-      {frame ? (
+      {liveFrame && frame ? (
         <>
           {frame.champion_saved_this_generation ? (
             <p className="status-banner success">
@@ -52,7 +106,7 @@ export function TrainingPage() {
           {generationEndMessage ? <p className="status-banner">{generationEndMessage}</p> : null}
           <div className="content-grid">
             <div className="canvas-panel">
-              <GameCanvas gameState={frame} />
+              <GameCanvas gameState={liveFrame} />
             </div>
             <div className="stats-panel">
               <div className="training-stats training-stats-compact">
@@ -81,8 +135,16 @@ export function TrainingPage() {
                   <span className="stat-value">{Math.round(frame.generation_best_fitness)}</span>
                 </div>
                 <div className="stat-pill stat-pill-compact">
+                  <span className="stat-label">Average fitness</span>
+                  <span className="stat-value">{Math.round(frame.generation_average_fitness)}</span>
+                </div>
+                <div className="stat-pill stat-pill-compact">
                   <span className="stat-label">Champion fitness</span>
                   <span className="stat-value">{Math.round(frame.best_fitness)}</span>
+                </div>
+                <div className="stat-pill stat-pill-compact">
+                  <span className="stat-label">Species</span>
+                  <span className="stat-value">{frame.species_count}</span>
                 </div>
                 <div className="stat-pill stat-pill-compact">
                   <span className="stat-label">Frame</span>
@@ -111,6 +173,53 @@ export function TrainingPage() {
                   </span>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <div className="insight-grid">
+            <div className="table-card accordion-card">
+              <button
+                type="button"
+                className="accordion-summary accordion-button"
+                onClick={() => setShowMetrics((current) => !current)}
+              >
+                <div>
+                  <h2>Training Metrics</h2>
+                  <p>Completed generations plotted from the backend training stream.</p>
+                </div>
+                <span className="inline-note">{showMetrics ? 'Hide' : 'Show'}</span>
+              </button>
+              {showMetrics ? (
+                <div className="accordion-content">
+                  <Suspense fallback={<div className="chart-empty"><p>Loading metrics...</p></div>}>
+                    <MetricsChart history={insightHistory} />
+                  </Suspense>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="table-card accordion-card">
+              <button
+                type="button"
+                className="accordion-summary accordion-button"
+                onClick={() => setShowNetwork((current) => !current)}
+              >
+                <div>
+                  <h2>Current Best Network</h2>
+                  <p>Inspect the active champion topology and live signal flow.</p>
+                </div>
+                <span className="inline-note">{showNetwork ? 'Hide' : 'Show'}</span>
+              </button>
+              {showNetwork ? (
+                <div className="accordion-content">
+                  <Suspense fallback={<div className="network-empty"><p>Loading network...</p></div>}>
+                    <NetworkGraph
+                      network={insightNetwork}
+                      title="Current Best Network"
+                    />
+                  </Suspense>
+                </div>
+              ) : null}
             </div>
           </div>
         </>

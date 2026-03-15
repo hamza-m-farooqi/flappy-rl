@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { COMPETE_WS_URL } from '../config/env';
-import type { GameState } from '../components/GameCanvas';
+import type { GameState, NetworkGraphData } from '../components/GameCanvas';
 
 export type CompeteFrame = GameState & {
   type: 'compete_frame';
   run_name: string;
+  has_started: boolean;
   human_bird: GameState['bird'];
   ai_bird: GameState['bird'];
   human_score: number;
   ai_score: number;
   winner: 'human' | 'ai' | 'tie' | null;
+  focus_network?: NetworkGraphData | null;
 };
 
 type ConnectionState = {

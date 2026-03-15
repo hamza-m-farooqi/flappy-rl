@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 import time
 from pathlib import Path
+from statistics import mean
 
 import neat
 
@@ -17,6 +18,11 @@ from src.ai.genome_io import (
     save_champion,
     training_checkpoint_prefix,
 )
+from src.ai.neat_runtime import (
+    build_neat_config,
+    save_neat_overrides,
+    serialize_network,
+)
 from src.ai.sensors import build_inputs
 from src.config import load_game_config
 from src.game.world import World
@@ -29,23 +35,31 @@ NEAT_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "n
 class NeatTrainer:
     """Run NEAT training and broadcast live swarm updates."""
 
-    def __init__(self, run_name: str, resume: bool = False) -> None:
+    def __init__(
+        self,
+        run_name: str,
+        resume: bool = False,
+        neat_overrides: dict[str, int | float] | None = None,
+    ) -> None:
         self.game_config = load_game_config()
         self.training_config = self.game_config["training"]
         self.stop_event = threading.Event()
         self.run_name = normalize_run_name(run_name)
+        self.neat_overrides = neat_overrides or {}
         self.generation = 0
         self.best_fitness = 0.0
         self.best_pipes = 0
         self.best_genome_id: int | None = None
         self.last_saved_generation: int | None = None
         self.last_checkpoint_path: str | None = None
+        self.history: list[dict[str, int | float]] = []
+        self.statistics_reporter = neat.StatisticsReporter()
         self.checkpoint_generation_interval = int(
             self.training_config.get("checkpoint_generation_interval", 5)
         )
         self.population = self._build_population(resume=resume)
         self.population.add_reporter(neat.StdOutReporter(False))
-        self.population.add_reporter(neat.StatisticsReporter())
+        self.population.add_reporter(self.statistics_reporter)
         self.population.add_reporter(
             neat.Checkpointer(
                 generation_interval=self.checkpoint_generation_interval,
@@ -64,21 +78,27 @@ class NeatTrainer:
         self.stop_event.set()
 
     def _build_config(self) -> neat.Config:
-        return neat.Config(
-            neat.DefaultGenome,
-            neat.DefaultReproduction,
-            neat.DefaultSpeciesSet,
-            neat.DefaultStagnation,
-            str(NEAT_CONFIG_PATH),
+        return build_neat_config(
+            config_path=NEAT_CONFIG_PATH,
+            overrides=self.neat_overrides,
+            generated_dir=Path(training_checkpoint_prefix(self.run_name)).parent,
         )
 
     def _build_population(self, resume: bool) -> neat.Population:
         config = self._build_config()
         if not resume:
+            save_neat_overrides(
+                Path(training_checkpoint_prefix(self.run_name)).parent,
+                self.neat_overrides,
+            )
             return neat.Population(config)
 
         checkpoint_path = latest_training_checkpoint(self.run_name)
         if checkpoint_path is None:
+            save_neat_overrides(
+                Path(training_checkpoint_prefix(self.run_name)).parent,
+                self.neat_overrides,
+            )
             return neat.Population(config)
 
         # Resume with the saved NEAT config embedded in the checkpoint so internal
@@ -130,7 +150,9 @@ class NeatTrainer:
         generation_best_genome_id: int | None = None
         generation_best_fitness = float("-inf")
         generation_best_pipes = 0
+        generation_average_fitness = 0.0
         generation_end_reason: str | None = None
+        best_network_snapshot: dict[str, object] | None = None
 
         while (
             world.alive_count > 0
@@ -156,26 +178,26 @@ class NeatTrainer:
                     generation_best_genome = genome
                     generation_best_genome_id = genome_id
                     generation_best_pipes = bird.pipes_passed
+                    best_network_snapshot = serialize_network(
+                        genome,
+                        config,
+                        values=networks[genome_id].values,
+                    )
+
+            generation_average_fitness = mean(
+                float(genome.fitness or 0.0) for _, genome in genomes
+            )
 
             connection_manager.broadcast_state(
                 {
-                    "type": "training_frame",
-                    "run_name": self.run_name,
-                    "generation": self.generation,
-                    "alive_count": world.alive_count,
-                    "total_birds": len(world.birds),
-                    "generation_best_fitness": generation_best_fitness,
-                    "generation_best_pipes": generation_best_pipes,
-                    "best_fitness": self.best_fitness,
-                    "best_pipes": self.best_pipes,
-                    "best_genome_id": self.best_genome_id,
-                    "champion_available": champion_exists(self.run_name),
-                    "champion_path": str(champion_path(self.run_name)),
-                    "champion_saved_this_generation": False,
-                    "generation_complete": False,
-                    "generation_end_reason": None,
-                    "last_saved_generation": self.last_saved_generation,
-                    "last_checkpoint_path": self.last_checkpoint_path,
+                    **self._build_training_payload(
+                        world=world,
+                        generation_best_fitness=generation_best_fitness,
+                        generation_average_fitness=generation_average_fitness,
+                        generation_best_pipes=generation_best_pipes,
+                        generation_complete=False,
+                        generation_end_reason=None,
+                    ),
                     **world.serialize(),
                 }
             )
@@ -187,6 +209,16 @@ class NeatTrainer:
             generation_end_reason = "all_birds_dead"
         elif world.frame_count >= max_frames:
             generation_end_reason = "frame_cap"
+
+        self.history.append(
+            {
+                "generation": self.generation,
+                "max_fitness": generation_best_fitness,
+                "avg_fitness": generation_average_fitness,
+                "species_count": len(self.population.species.species),
+                "best_pipes": generation_best_pipes,
+            }
+        )
 
         if (
             generation_best_genome is not None
@@ -205,46 +237,78 @@ class NeatTrainer:
             self.last_checkpoint_path = str(checkpoint_path)
             connection_manager.broadcast_state(
                 {
-                    "type": "training_frame",
-                    "run_name": self.run_name,
-                    "generation": self.generation,
-                    "alive_count": world.alive_count,
-                    "total_birds": len(world.birds),
-                    "generation_best_fitness": generation_best_fitness,
-                    "generation_best_pipes": generation_best_pipes,
-                    "best_fitness": self.best_fitness,
-                    "best_pipes": self.best_pipes,
-                    "best_genome_id": self.best_genome_id,
-                    "champion_available": True,
-                    "champion_path": str(champion_path(self.run_name)),
-                    "champion_saved_this_generation": True,
-                    "generation_complete": True,
-                    "generation_end_reason": generation_end_reason,
-                    "last_saved_generation": self.last_saved_generation,
-                    "last_checkpoint_path": self.last_checkpoint_path,
+                    **self._build_training_payload(
+                        world=world,
+                        generation_best_fitness=generation_best_fitness,
+                        generation_average_fitness=generation_average_fitness,
+                        generation_best_pipes=generation_best_pipes,
+                        generation_complete=True,
+                        generation_end_reason=generation_end_reason,
+                        champion_saved_this_generation=True,
+                        focus_network=serialize_network(
+                            generation_best_genome,
+                            config,
+                            values=networks[generation_best_genome_id].values
+                            if generation_best_genome_id is not None
+                            else None,
+                        ),
+                        include_history=True,
+                    ),
                     **world.serialize(),
                 }
             )
         else:
             connection_manager.broadcast_state(
                 {
-                    "type": "training_frame",
-                    "run_name": self.run_name,
-                    "generation": self.generation,
-                    "alive_count": world.alive_count,
-                    "total_birds": len(world.birds),
-                    "generation_best_fitness": generation_best_fitness,
-                    "generation_best_pipes": generation_best_pipes,
-                    "best_fitness": self.best_fitness,
-                    "best_pipes": self.best_pipes,
-                    "best_genome_id": self.best_genome_id,
-                    "champion_available": champion_exists(self.run_name),
-                    "champion_path": str(champion_path(self.run_name)),
-                    "champion_saved_this_generation": False,
-                    "generation_complete": True,
-                    "generation_end_reason": generation_end_reason,
-                    "last_saved_generation": self.last_saved_generation,
-                    "last_checkpoint_path": self.last_checkpoint_path,
+                    **self._build_training_payload(
+                        world=world,
+                        generation_best_fitness=generation_best_fitness,
+                        generation_average_fitness=generation_average_fitness,
+                        generation_best_pipes=generation_best_pipes,
+                        generation_complete=True,
+                        generation_end_reason=generation_end_reason,
+                        focus_network=best_network_snapshot,
+                        include_history=True,
+                    ),
                     **world.serialize(),
                 }
             )
+
+    def _build_training_payload(
+        self,
+        world: World,
+        generation_best_fitness: float,
+        generation_average_fitness: float,
+        generation_best_pipes: int,
+        generation_complete: bool,
+        generation_end_reason: str | None,
+        champion_saved_this_generation: bool = False,
+        focus_network: dict[str, object] | None = None,
+        include_history: bool = False,
+    ) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "type": "training_frame",
+            "run_name": self.run_name,
+            "generation": self.generation,
+            "alive_count": world.alive_count,
+            "total_birds": len(world.birds),
+            "generation_best_fitness": generation_best_fitness,
+            "generation_average_fitness": generation_average_fitness,
+            "generation_best_pipes": generation_best_pipes,
+            "best_fitness": self.best_fitness,
+            "best_pipes": self.best_pipes,
+            "best_genome_id": self.best_genome_id,
+            "species_count": len(self.population.species.species),
+            "champion_available": champion_exists(self.run_name),
+            "champion_path": str(champion_path(self.run_name)),
+            "champion_saved_this_generation": champion_saved_this_generation,
+            "generation_complete": generation_complete,
+            "generation_end_reason": generation_end_reason,
+            "last_saved_generation": self.last_saved_generation,
+            "last_checkpoint_path": self.last_checkpoint_path,
+        }
+        if include_history:
+            payload["history"] = self.history[-60:]
+        if focus_network is not None:
+            payload["focus_network"] = focus_network
+        return payload

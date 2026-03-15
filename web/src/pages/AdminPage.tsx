@@ -9,12 +9,25 @@ type RunSummary = {
   best_score: number | null;
   best_fitness: number | null;
   last_saved_generation: number | null;
+  neat_overrides: Record<string, number>;
+};
+
+type OverrideParameter = {
+  key: string;
+  section: string;
+  type: 'int' | 'float';
+  min: number;
+  max: number;
+  label: string;
+  description: string;
+  default: number;
 };
 
 type TrainingStatus = {
   is_running: boolean;
   active_run_name: string | null;
   runs: RunSummary[];
+  override_parameters: OverrideParameter[];
 };
 
 type LoginResponse = {
@@ -27,6 +40,7 @@ const ADMIN_TOKEN_KEY = 'flappy_rl_admin_token';
 export function AdminPage() {
   const [password, setPassword] = useState('');
   const [trainingName, setTrainingName] = useState('');
+  const [neatOverrides, setNeatOverrides] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<TrainingStatus | null>(null);
   const [requestState, setRequestState] = useState<'idle' | 'loading'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -101,7 +115,10 @@ export function AdminPage() {
     setErrorMessage(null);
   };
 
-  const runAction = async (path: string, payload?: { run_name: string }) => {
+  const runAction = async (
+    path: string,
+    payload?: { run_name: string; neat_overrides?: Record<string, number> },
+  ) => {
     if (!headers) {
       return;
     }
@@ -113,6 +130,7 @@ export function AdminPage() {
       await loadStatus();
       if (path === '/admin/training/start') {
         setTrainingName('');
+        setNeatOverrides({});
       }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Admin action failed.');
@@ -173,29 +191,18 @@ export function AdminPage() {
           </p>
         </div>
         <div className="heading-side">
-          <span className={`status-chip ${status?.is_running ? 'live' : 'idle'}`}>
-            {status?.is_running ? `Active: ${status.active_run_name}` : 'Trainer idle'}
-          </span>
+          <div className="admin-heading-actions">
+            <span className={`status-chip ${status?.is_running ? 'live' : 'idle'}`}>
+              {status?.is_running ? `Active: ${status.active_run_name}` : 'Trainer idle'}
+            </span>
+            <button className="badge-button" onClick={logout}>
+              Logout
+            </button>
+          </div>
         </div>
       </div>
 
       {errorMessage ? <p className="status-banner error">{errorMessage}</p> : null}
-
-      <div className="training-stats">
-        <div className="stat-pill">
-          <span className="stat-label">Trainer</span>
-          <span className="stat-value">
-            {status?.is_running ? `Running (${status.active_run_name})` : 'Idle'}
-          </span>
-        </div>
-        <div className="stat-pill">
-          <span className="stat-label">Runs discovered</span>
-          <span className="stat-value">{status?.runs.length ?? 0}</span>
-        </div>
-        <button className="ghost-button small" onClick={logout}>
-          Logout
-        </button>
-      </div>
 
       <div className="submit-panel">
         <div className="submit-copy">
@@ -213,7 +220,16 @@ export function AdminPage() {
           <button
             className="action-button"
             disabled={requestState === 'loading' || !trainingName.trim() || Boolean(status?.is_running)}
-            onClick={() => void runAction('/admin/training/start', { run_name: trainingName })}
+            onClick={() =>
+              void runAction('/admin/training/start', {
+                run_name: trainingName,
+                neat_overrides: Object.fromEntries(
+                  Object.entries(neatOverrides)
+                    .filter(([, value]) => value.trim() !== '')
+                    .map(([key, value]) => [key, Number(value)]),
+                ),
+              })
+            }
           >
             Start New Run
           </button>
@@ -226,6 +242,59 @@ export function AdminPage() {
           </button>
         </div>
       </div>
+
+      <details className="table-card accordion-card">
+        <summary className="accordion-summary">
+          <div>
+            <h2>NEAT run tuning</h2>
+            <p>Override selected evolution parameters for a new run without editing files.</p>
+          </div>
+          <span className="inline-note">Applied only when starting a fresh run</span>
+        </summary>
+        <div className="override-grid accordion-content">
+          {(status?.override_parameters ?? []).map((parameter) => (
+            <label key={parameter.key} className="override-card">
+              <div className="override-copy">
+                <span className="override-label">{parameter.label}</span>
+                <span className="override-description">{parameter.description}</span>
+              </div>
+              <div className="override-control-row">
+                <input
+                  className="text-input override-input"
+                  type="number"
+                  min={parameter.min}
+                  max={parameter.max}
+                  step={parameter.type === 'int' ? 1 : 0.01}
+                  value={neatOverrides[parameter.key] ?? ''}
+                  onChange={(event) =>
+                    setNeatOverrides((current) => ({
+                      ...current,
+                      [parameter.key]: event.target.value,
+                    }))
+                  }
+                  placeholder={String(parameter.default)}
+                />
+                <button
+                  type="button"
+                  className="ghost-button small"
+                  onClick={() =>
+                    setNeatOverrides((current) => {
+                      const next = { ...current };
+                      delete next[parameter.key];
+                      return next;
+                    })
+                  }
+                >
+                  Default
+                </button>
+              </div>
+              <span className="inline-note">
+                Range {parameter.min} to {parameter.max} · base {parameter.default} · {parameter.section}
+              </span>
+            </label>
+          ))}
+        </div>
+      </details>
 
       <div className="table-card">
         <div className="table-header-copy">
@@ -274,6 +343,31 @@ export function AdminPage() {
           ) : null}
         </div>
       </div>
+
+      {status && status.runs.length > 0 ? (
+        <div className="table-card">
+          <div className="table-header-copy">
+            <div>
+              <h2>Run configuration snapshots</h2>
+              <p>Stored overrides make each experiment easier to compare later.</p>
+            </div>
+          </div>
+          <div className="run-config-list">
+            {status.runs.map((run) => (
+              <article key={`${run.run_name}-config`} className="run-config-card">
+                <h3>{run.run_name}</h3>
+                <p>
+                  {Object.keys(run.neat_overrides).length > 0
+                    ? Object.entries(run.neat_overrides)
+                        .map(([key, value]) => `${key}: ${value}`)
+                        .join(' · ')
+                    : 'Using default NEAT parameters'}
+                </p>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
