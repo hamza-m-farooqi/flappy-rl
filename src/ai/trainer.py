@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 import neat
 
@@ -29,7 +30,12 @@ NEAT_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "n
 class NeatTrainer:
     """Run NEAT training and broadcast live swarm updates."""
 
-    def __init__(self, run_name: str, resume: bool = False, config_overrides: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        run_name: str,
+        resume: bool = False,
+        config_overrides: dict[str, Any] | None = None,
+    ) -> None:
         self.game_config = load_game_config()
         self.config_overrides = config_overrides or {}
         self.training_config = self.game_config["training"]
@@ -76,7 +82,9 @@ class NeatTrainer:
         if "pop_size" in self.config_overrides:
             config.pop_size = self.config_overrides["pop_size"]
         if "weight_mutate_rate" in self.config_overrides:
-            config.genome_config.weight_mutate_rate = self.config_overrides["weight_mutate_rate"]
+            config.genome_config.weight_mutate_rate = self.config_overrides[
+                "weight_mutate_rate"
+            ]
         return config
 
     def _build_population(self, resume: bool) -> neat.Population:
@@ -143,19 +151,42 @@ class NeatTrainer:
         generation_stats = {
             "max_fitness": None,
             "avg_fitness": None,
-            "species_count": len(self.population.species.species) if self.population.species else 0,
+            "species_count": len(self.population.species.species)
+            if self.population.species
+            else 0,
         }
         if self.generation > 0 and self.stats_reporter.get_fitness_stat(max):
-            generation_stats["max_fitness"] = self.stats_reporter.get_fitness_stat(max)[-1]
+            generation_stats["max_fitness"] = self.stats_reporter.get_fitness_stat(max)[
+                -1
+            ]
             generation_stats["avg_fitness"] = self.stats_reporter.get_fitness_mean()[-1]
 
         def get_network_topology(genome):
             if genome is None:
                 return None
-            nodes = [{"id": n_id, "type": "output" if n_id in config.genome_config.output_keys else "hidden", "bias": n.bias, "response": n.response, "activation": n.activation} for n_id, n in genome.nodes.items()]
+            nodes = [
+                {
+                    "id": n_id,
+                    "type": "output"
+                    if n_id in config.genome_config.output_keys
+                    else "hidden",
+                    "bias": n.bias,
+                    "response": n.response,
+                    "activation": n.activation,
+                }
+                for n_id, n in genome.nodes.items()
+            ]
             for i_key in config.genome_config.input_keys:
                 nodes.append({"id": i_key, "type": "input"})
-            connections = [{"in": c.key[0], "out": c.key[1], "weight": c.weight, "enabled": c.enabled} for c_id, c in genome.connections.items()]
+            connections = [
+                {
+                    "in": c.key[0],
+                    "out": c.key[1],
+                    "weight": c.weight,
+                    "enabled": c.enabled,
+                }
+                for c_id, c in genome.connections.items()
+            ]
             return {"nodes": nodes, "connections": connections}
 
         while (

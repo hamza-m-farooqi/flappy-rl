@@ -20,7 +20,9 @@ class TrainingManager:
         self._thread: threading.Thread | None = None
         self._active_run_name: str | None = None
 
-    def start(self, run_name: str, resume: bool, overrides: dict[str, Any] | None = None) -> dict[str, Any]:
+    def start(
+        self, run_name: str, resume: bool, overrides: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Start a named training run if none is already active."""
         normalized_name = normalize_run_name(run_name)
 
@@ -28,7 +30,9 @@ class TrainingManager:
             if self.is_running():
                 raise RuntimeError("A training run is already active.")
 
-            trainer = NeatTrainer(run_name=normalized_name, resume=resume, config_overrides=overrides)
+            trainer = NeatTrainer(
+                run_name=normalized_name, resume=resume, config_overrides=overrides
+            )
             thread = threading.Thread(target=trainer.run, daemon=True)
             thread.start()
 
