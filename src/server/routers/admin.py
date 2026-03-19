@@ -30,6 +30,12 @@ class TrainingRequest(BaseModel):
     neat_overrides: dict[str, int | float] = Field(default_factory=dict)
 
 
+class StopRequest(BaseModel):
+    """Incoming admin request to stop a specific named training run."""
+
+    run_name: str = Field(min_length=1, max_length=64)
+
+
 class LoginRequest(BaseModel):
     """Incoming admin login payload."""
 
@@ -47,7 +53,7 @@ async def login(payload: LoginRequest) -> dict[str, str]:
 
 @router.get("/training/status", dependencies=[Depends(require_admin)])
 async def get_training_status() -> dict[str, Any]:
-    """Return the active training status and discovered named runs."""
+    """Return multi-run training status and discovered named runs."""
     status = training_manager.status()
     status["override_parameters"] = override_parameter_catalog()
     status["game_modes"] = list_game_modes()
@@ -56,7 +62,7 @@ async def get_training_status() -> dict[str, Any]:
 
 @router.post("/training/start", dependencies=[Depends(require_admin)])
 async def start_training(payload: TrainingRequest) -> dict[str, Any]:
-    """Start a fresh named training run."""
+    """Start a fresh named training run (multiple may run concurrently)."""
     try:
         return training_manager.start(
             normalize_run_name(payload.run_name),
@@ -85,9 +91,9 @@ async def resume_training(payload: TrainingRequest) -> dict[str, Any]:
 
 
 @router.post("/training/stop", dependencies=[Depends(require_admin)])
-async def stop_training() -> dict[str, Any]:
-    """Request that the active training run stop."""
-    return training_manager.stop()
+async def stop_training(payload: StopRequest) -> dict[str, Any]:
+    """Request that a specific named training run stop."""
+    return training_manager.stop(normalize_run_name(payload.run_name))
 
 
 @router.get("/champions", dependencies=[Depends(require_admin)])

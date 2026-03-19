@@ -5,7 +5,7 @@ import { API_BASE_URL, TRAINING_WS_URL } from '../config/env';
 
 type PublicTrainingStatus = {
   is_running: boolean;
-  active_run_name: string | null;
+  active_run_names: string[];
 };
 
 export function useTrainingSocket() {

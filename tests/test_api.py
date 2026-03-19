@@ -64,7 +64,7 @@ def test_training_status_schema(monkeypatch: Any) -> None:
         "status",
         lambda: {
             "is_running": False,
-            "active_run_name": None,
+            "active_run_names": [],
             "runs": [],
             "champions": [],
         },
@@ -74,7 +74,7 @@ def test_training_status_schema(monkeypatch: Any) -> None:
     response = client.get("/training/status")
 
     assert response.status_code == 200
-    assert response.json() == {"is_running": False, "active_run_name": None}
+    assert response.json() == {"is_running": False, "active_run_names": []}
 
 
 def test_game_state_schema() -> None:
@@ -112,7 +112,7 @@ def test_admin_login_and_protected_status(monkeypatch: Any) -> None:
         "status",
         lambda: {
             "is_running": False,
-            "active_run_name": None,
+            "active_run_names": [],
             "runs": [],
             "champions": [],
         },

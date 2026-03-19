@@ -1,5 +1,5 @@
 import { Suspense, lazy, startTransition, useEffect, useRef, useState } from 'react';
-import { GameCanvas, type NetworkGraphData, type TrainingHistoryPoint } from '../components/GameCanvas';
+import { GameCanvas, type NetworkGraphData, type TrainingFrame, type TrainingHistoryPoint } from '../components/GameCanvas';
 import { useTrainingSocket } from '../hooks/useTrainingSocket';
 
 const MetricsChart = lazy(async () => {
@@ -18,22 +18,59 @@ export function TrainingPage() {
   const [insightNetwork, setInsightNetwork] = useState<NetworkGraphData | null>(null);
   const [showMetrics, setShowMetrics] = useState(false);
   const [showNetwork, setShowNetwork] = useState(false);
+  const [selectedRunName, setSelectedRunName] = useState<string | null>(null);
+  // Filtered frames — only updated when frame.run_name matches selectedRunName.
+  // Keeping these in state (not computed inline) prevents flickering when frames
+  // from other concurrent runs arrive and would otherwise momentarily null-out the display.
+  const [filteredLiveFrame, setFilteredLiveFrame] = useState<TrainingFrame | null>(null);
+  const [filteredUiFrame, setFilteredUiFrame] = useState<TrainingFrame | null>(null);
   const lastHistoryLengthRef = useRef(0);
   const lastNetworkFrameRef = useRef(-1);
-  const frame = uiFrame ?? liveFrame;
+
+  const activeRunNames: string[] = trainingStatus?.active_run_names ?? [];
+
+  // Auto-select the first active run if nothing is selected (or if selected run stopped)
+  useEffect(() => {
+    if (activeRunNames.length === 0) {
+      setSelectedRunName(null);
+      return;
+    }
+    // If current selection is gone, fall back to the first available run
+    if (selectedRunName === null || !activeRunNames.includes(selectedRunName)) {
+      setSelectedRunName(activeRunNames[0] ?? null);
+    }
+  }, [activeRunNames, selectedRunName]);
+
+  // Accept incoming live frames only if they belong to the selected run.
+  // Frames from other runs are silently dropped so the display doesn't flicker.
+  useEffect(() => {
+    if (!liveFrame) return;
+    if (selectedRunName === null || liveFrame.run_name === selectedRunName) {
+      setFilteredLiveFrame(liveFrame);
+    }
+  }, [liveFrame, selectedRunName]);
 
   useEffect(() => {
-    if (!uiFrame) {
+    if (!uiFrame) return;
+    if (selectedRunName === null || uiFrame.run_name === selectedRunName) {
+      setFilteredUiFrame(uiFrame);
+    }
+  }, [uiFrame, selectedRunName]);
+
+  const frame = filteredUiFrame ?? filteredLiveFrame;
+
+  useEffect(() => {
+    if (!filteredUiFrame) {
       return;
     }
 
-    const history = uiFrame.history;
+    const history = filteredUiFrame.history;
 
     if (
       history &&
       (
         history.length !== lastHistoryLengthRef.current ||
-        uiFrame.generation_complete
+        filteredUiFrame.generation_complete
       )
     ) {
       lastHistoryLengthRef.current = history.length;
@@ -43,19 +80,29 @@ export function TrainingPage() {
     }
 
     if (
-      uiFrame.focus_network &&
+      filteredUiFrame.focus_network &&
       (
-        uiFrame.generation_complete ||
-        uiFrame.champion_saved_this_generation ||
-        uiFrame.frame - lastNetworkFrameRef.current >= 10
+        filteredUiFrame.generation_complete ||
+        filteredUiFrame.champion_saved_this_generation ||
+        filteredUiFrame.frame - lastNetworkFrameRef.current >= 10
       )
     ) {
-      lastNetworkFrameRef.current = uiFrame.frame;
+      lastNetworkFrameRef.current = filteredUiFrame.frame;
       startTransition(() => {
-        setInsightNetwork(uiFrame.focus_network ?? null);
+        setInsightNetwork(filteredUiFrame.focus_network ?? null);
       });
     }
-  }, [uiFrame]);
+  }, [filteredUiFrame]);
+
+  // Reset everything when switching runs so stale frames don't linger
+  useEffect(() => {
+    setInsightHistory([]);
+    setInsightNetwork(null);
+    setFilteredLiveFrame(null);
+    setFilteredUiFrame(null);
+    lastHistoryLengthRef.current = 0;
+    lastNetworkFrameRef.current = -1;
+  }, [selectedRunName]);
 
   const generationEndMessage =
     frame?.generation_complete && frame.generation_end_reason
@@ -65,6 +112,8 @@ export function TrainingPage() {
           ? `Generation ${frame.generation} ended because all birds died.`
           : `Generation ${frame.generation} ended because training was stopped.`
       : null;
+
+  const isLive = status === 'connected' && (trainingStatus?.is_running ?? false);
 
   return (
     <section className="page page-training">
@@ -78,24 +127,45 @@ export function TrainingPage() {
           </p>
         </div>
         <div className="heading-side">
-          <span className={`status-chip ${status === 'connected' && trainingStatus?.is_running ? 'live' : 'idle'}`}>
-            {trainingStatus?.is_running ? `Run ${trainingStatus.active_run_name ?? 'active'}` : 'Trainer idle'}
+          <span className={`status-chip ${isLive ? 'live' : 'idle'}`}>
+            {isLive
+              ? `${activeRunNames.length} run${activeRunNames.length > 1 ? 's' : ''} active`
+              : 'Trainer idle'}
           </span>
         </div>
       </div>
 
+      {/* Run selector — only shown when 2+ runs are active */}
+      {activeRunNames.length > 1 ? (
+        <div className="run-selector">
+          <span className="run-selector-label">Monitoring:</span>
+          <div className="run-selector-tabs">
+            {activeRunNames.map((name) => (
+              <button
+                key={name}
+                type="button"
+                className={`run-tab ${selectedRunName === name ? 'run-tab-active' : ''}`}
+                onClick={() => setSelectedRunName(name)}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {errorMessage ? <p className="status-banner error">{errorMessage}</p> : null}
-      {!liveFrame && !errorMessage ? (
+      {!filteredLiveFrame && !errorMessage ? (
         <p className="status-banner">
           {status === 'connecting'
             ? 'Connecting to live training stream...'
-            : trainingStatus?.is_running
-              ? `Waiting for live frames from ${trainingStatus.active_run_name ?? 'the active run'}...`
+            : activeRunNames.length > 0
+              ? `Waiting for live frames from ${selectedRunName ?? activeRunNames[0] ?? 'the active run'}...`
               : 'No training is currently running. Start or resume a run from the Admin page.'}
         </p>
       ) : null}
 
-      {liveFrame && frame ? (
+      {filteredLiveFrame && frame ? (
         <>
           {frame.champion_saved_this_generation ? (
             <p className="status-banner success">
@@ -106,7 +176,7 @@ export function TrainingPage() {
           {generationEndMessage ? <p className="status-banner">{generationEndMessage}</p> : null}
           <div className="content-grid">
             <div className="canvas-panel">
-              <GameCanvas gameState={liveFrame} />
+              <GameCanvas gameState={filteredLiveFrame} />
             </div>
             <div className="stats-panel">
               <div className="training-stats training-stats-compact">

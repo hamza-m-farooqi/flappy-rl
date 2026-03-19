@@ -34,12 +34,12 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     @app.get("/training/status")
-    async def training_status() -> dict[str, str | bool | None]:
+    async def training_status() -> dict[str, bool | list[str]]:
         """Return the public active training status for the live monitor."""
         status = training_manager.status()
         return {
             "is_running": status["is_running"],
-            "active_run_name": status["active_run_name"],
+            "active_run_names": status["active_run_names"],
         }
 
     @app.websocket("/ws/training")

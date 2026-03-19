@@ -12,13 +12,12 @@ from src.ai.trainer import NeatTrainer
 
 
 class TrainingManager:
-    """Manage a single active named training run inside the API server."""
+    """Manage multiple concurrent named training runs inside the API server."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._trainer: NeatTrainer | None = None
-        self._thread: threading.Thread | None = None
-        self._active_run_name: str | None = None
+        # Maps normalized run_name → (trainer, thread)
+        self._runs: dict[str, tuple[NeatTrainer, threading.Thread]] = {}
 
     def start(
         self,
@@ -27,12 +26,19 @@ class TrainingManager:
         mode: str | None = None,
         neat_overrides: dict[str, int | float] | None = None,
     ) -> dict[str, Any]:
-        """Start a named training run if none is already active."""
+        """Start a named training run.
+
+        Raises RuntimeError if that specific run name is already active.
+        Multiple different run names can train concurrently.
+        """
         normalized_name = normalize_run_name(run_name)
 
         with self._lock:
-            if self.is_running():
-                raise RuntimeError("A training run is already active.")
+            self._reap_finished()
+            if normalized_name in self._runs:
+                raise RuntimeError(
+                    f"Training run '{normalized_name}' is already active."
+                )
 
             trainer = NeatTrainer(
                 run_name=normalized_name,
@@ -42,40 +48,59 @@ class TrainingManager:
             )
             thread = threading.Thread(target=trainer.run, daemon=True)
             thread.start()
-
-            self._trainer = trainer
-            self._thread = thread
-            self._active_run_name = normalized_name
+            self._runs[normalized_name] = (trainer, thread)
 
         return self.status()
 
-    def stop(self) -> dict[str, Any]:
-        """Request that the active training run stop."""
+    def stop(self, run_name: str) -> dict[str, Any]:
+        """Signal a specific named training run to stop."""
+        normalized_name = normalize_run_name(run_name)
         with self._lock:
-            trainer = self._trainer
+            entry = self._runs.get(normalized_name)
 
-        if trainer is not None:
+        if entry is not None:
+            trainer, _ = entry
             trainer.stop()
 
         return self.status()
 
-    def is_running(self) -> bool:
-        """Return whether a training thread is currently alive."""
-        return self._thread is not None and self._thread.is_alive()
+    def stop_all(self) -> None:
+        """Signal every active training run to stop (used on server shutdown)."""
+        with self._lock:
+            entries = list(self._runs.values())
+        for trainer, _ in entries:
+            trainer.stop()
+
+    def is_running(self, run_name: str | None = None) -> bool:
+        """Return whether any (or a specific) run is currently active."""
+        with self._lock:
+            self._reap_finished()
+            if run_name is None:
+                return bool(self._runs)
+            return normalize_run_name(run_name) in self._runs
+
+    @property
+    def active_run_names(self) -> list[str]:
+        """Return the names of all currently running training runs."""
+        with self._lock:
+            self._reap_finished()
+            return list(self._runs.keys())
 
     def status(self) -> dict[str, Any]:
-        """Return the active training status plus discovered run metadata."""
-        if self._thread is not None and not self._thread.is_alive():
-            self._thread = None
-            self._trainer = None
-            self._active_run_name = None
-
+        """Return multi-run training status plus discovered run metadata."""
+        active = self.active_run_names
         return {
-            "is_running": self.is_running(),
-            "active_run_name": self._active_run_name,
+            "is_running": bool(active),
+            "active_run_names": active,
             "runs": list_training_runs(),
             "champions": list_available_champions(),
         }
+
+    def _reap_finished(self) -> None:
+        """Remove runs whose threads have finished (must be called under lock)."""
+        dead = [name for name, (_, t) in self._runs.items() if not t.is_alive()]
+        for name in dead:
+            del self._runs[name]
 
 
 training_manager = TrainingManager()

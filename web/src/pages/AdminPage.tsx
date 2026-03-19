@@ -26,7 +26,7 @@ type OverrideParameter = {
 
 type TrainingStatus = {
   is_running: boolean;
-  active_run_name: string | null;
+  active_run_names: string[];
   runs: RunSummary[];
   override_parameters: OverrideParameter[];
   game_modes: Array<{
@@ -52,6 +52,7 @@ export function AdminPage() {
   const [requestState, setRequestState] = useState<'idle' | 'loading'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(ADMIN_TOKEN_KEY));
+  const [stoppingRuns, setStoppingRuns] = useState<Set<string>>(new Set());
 
   const headers = useMemo(
     () => (token ? { Authorization: `Bearer ${token}` } : undefined),
@@ -70,6 +71,12 @@ export function AdminPage() {
         });
         setStatus(response.data);
         setErrorMessage(null);
+        // Clear stopping state for runs that are no longer active
+        setStoppingRuns((current) => {
+          const active = new Set(response.data.active_run_names);
+          const next = new Set([...current].filter((name) => active.has(name)));
+          return next.size === current.size ? current : next;
+        });
       } catch (error) {
         if (axios.isAxiosError(error) && error.response?.status === 401) {
           localStorage.removeItem(ADMIN_TOKEN_KEY);
@@ -147,6 +154,28 @@ export function AdminPage() {
     }
   };
 
+  const stopRun = async (runName: string) => {
+    if (!headers) return;
+    setStoppingRuns((current) => new Set([...current, runName]));
+    try {
+      await axios.post(
+        `${API_BASE_URL}/admin/training/stop`,
+        { run_name: runName },
+        { headers },
+      );
+      await loadStatus();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : `Failed to stop run '${runName}'.`);
+      setStoppingRuns((current) => {
+        const next = new Set(current);
+        next.delete(runName);
+        return next;
+      });
+    }
+  };
+
+  const activeRunCount = status?.active_run_names.length ?? 0;
+
   if (!token) {
     return (
       <section className="page page-training">
@@ -194,14 +223,15 @@ export function AdminPage() {
           <p className="eyebrow">Admin</p>
           <h1>Training Control</h1>
           <p className="lede">
-            Protected browser controls for starting, resuming, and stopping one named
-            training run at a time.
+            Start, resume, and stop named training runs. Multiple runs can train concurrently.
           </p>
         </div>
         <div className="heading-side">
           <div className="admin-heading-actions">
-            <span className={`status-chip ${status?.is_running ? 'live' : 'idle'}`}>
-              {status?.is_running ? `Active: ${status.active_run_name}` : 'Trainer idle'}
+            <span className={`status-chip ${activeRunCount > 0 ? 'live' : 'idle'}`}>
+              {activeRunCount > 0
+                ? `${activeRunCount} run${activeRunCount > 1 ? 's' : ''} active`
+                : 'Trainer idle'}
             </span>
             <button className="badge-button" onClick={logout}>
               Logout
@@ -215,7 +245,7 @@ export function AdminPage() {
       <div className="submit-panel">
         <div className="submit-copy">
           <h2>Start a new training run</h2>
-          <p>Each run gets its own folder under `checkpoints/`.</p>
+          <p>Each run gets its own folder under <code>checkpoints/</code>. Multiple runs can train at the same time.</p>
         </div>
         <div className="submit-form">
           <input
@@ -238,7 +268,7 @@ export function AdminPage() {
           </select>
           <button
             className="action-button"
-            disabled={requestState === 'loading' || !trainingName.trim() || Boolean(status?.is_running)}
+            disabled={requestState === 'loading' || !trainingName.trim()}
             onClick={() =>
               void runAction('/admin/training/start', {
                 run_name: trainingName,
@@ -252,13 +282,6 @@ export function AdminPage() {
             }
           >
             Start New Run
-          </button>
-          <button
-            className="ghost-button"
-            disabled={requestState === 'loading' || !status?.is_running}
-            onClick={() => void runAction('/admin/training/stop')}
-          >
-            Stop Active Run
           </button>
         </div>
       </div>
@@ -320,7 +343,7 @@ export function AdminPage() {
         <div className="table-header-copy">
           <div>
             <h2>Named runs</h2>
-            <p>Resume behavior, checkpoints, and trainer state stay wired to the existing admin endpoints.</p>
+            <p>Stop a running run, or resume one from its last checkpoint.</p>
           </div>
         </div>
         <div className="leaderboard-shell">
@@ -331,7 +354,8 @@ export function AdminPage() {
             <span>Actions</span>
           </div>
           {(status?.runs ?? []).map((run) => {
-            const isActiveRun = status?.is_running && status.active_run_name === run.run_name;
+            const isActiveRun = status?.active_run_names.includes(run.run_name) ?? false;
+            const isStopping = stoppingRuns.has(run.run_name);
 
             return (
               <div key={run.run_name} className="leaderboard-row">
@@ -344,16 +368,25 @@ export function AdminPage() {
                 <span>{run.best_score ?? '-'}</span>
                 <span className="row-actions">
                   {isActiveRun ? (
-                    <span className="status-chip live">Running</span>
+                    <>
+                      <span className="status-chip live">Running</span>
+                      <button
+                        className="ghost-button small"
+                        disabled={isStopping}
+                        onClick={() => void stopRun(run.run_name)}
+                      >
+                        {isStopping ? 'Stopping…' : 'Stop'}
+                      </button>
+                    </>
                   ) : (
                     <button
                       className="ghost-button small"
                       disabled={
-                        requestState === 'loading' ||
-                        Boolean(status?.is_running) ||
-                        !run.has_training_checkpoint
+                        requestState === 'loading' || !run.has_training_checkpoint
                       }
-                      onClick={() => void runAction('/admin/training/resume', { run_name: run.run_name })}
+                      onClick={() =>
+                        void runAction('/admin/training/resume', { run_name: run.run_name })
+                      }
                     >
                       Resume
                     </button>
