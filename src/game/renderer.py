@@ -12,6 +12,8 @@ class PygameRenderer:
     GROUND = (224, 205, 150)
     PIPE = (68, 160, 92)
     BIRD = (232, 186, 68)
+    FEATHER = (74, 142, 255)
+    ANVIL = (119, 127, 145)
     TEXT = (41, 51, 56)
 
     def __init__(self, world: World) -> None:
@@ -30,6 +32,7 @@ class PygameRenderer:
         self.screen.fill(self.SKY)
         self._draw_ground()
         self._draw_pipes()
+        self._draw_pickups()
         self._draw_bird()
         self._draw_hud()
         pygame.display.flip()
@@ -75,9 +78,26 @@ class PygameRenderer:
                 bird.radius,
             )
 
+    def _draw_pickups(self) -> None:
+        for pickup in self.world.pickups:
+            color = self.FEATHER if pickup.kind == "feather" else self.ANVIL
+            pygame.draw.circle(
+                self.screen,
+                color,
+                (int(pickup.x), int(pickup.y)),
+                pickup.radius,
+            )
+
     def _draw_hud(self) -> None:
         score_surface = self.font.render(f"Score: {self.world.score}", True, self.TEXT)
         self.screen.blit(score_surface, (20, 20))
+
+        mode_surface = self.font.render(
+            f"Mode: {self.world.mode}",
+            True,
+            self.TEXT,
+        )
+        self.screen.blit(mode_surface, (20, 54))
 
         if self.world.game_over:
             game_over_surface = self.font.render(

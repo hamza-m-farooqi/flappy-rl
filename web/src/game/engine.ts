@@ -7,6 +7,8 @@ export type PlayBird = {
   velocity: number;
   alive: boolean;
   pipes_passed: number;
+  active_effect?: string | null;
+  effect_remaining_frames?: number;
 };
 
 export type PlayPipe = {
@@ -15,6 +17,13 @@ export type PlayPipe = {
   gap_y: number;
   gap_size: number;
   passed: boolean;
+};
+
+export type PlayPickup = {
+  x: number;
+  y: number;
+  kind: 'feather' | 'anvil';
+  radius: number;
 };
 
 export type PlayState = {
@@ -34,6 +43,7 @@ export type PlayState = {
   };
   bird: PlayBird;
   pipes: PlayPipe[];
+  pickups: PlayPickup[];
 };
 
 const CONFIG = {
@@ -58,6 +68,18 @@ const CONFIG = {
     min_gap_y: 140,
     max_gap_y: 380,
   },
+  pickups: {
+    radius: 16,
+    spawn_interval: 210,
+    start_offset: 420,
+    min_y: 120,
+    max_y: 420,
+    max_active_pickups: 1,
+    feather_duration_frames: 170,
+    feather_gravity_multiplier: 0.68,
+    anvil_duration_frames: 150,
+    anvil_gravity_multiplier: 1.55,
+  },
   modes: {
     easy: {
       base_pipe_speed: 3.0,
@@ -68,6 +90,7 @@ const CONFIG = {
       gap_shrink_per_pipe: 0,
       max_gap_shrink: 0,
       min_gap_size: 170,
+      pickups_enabled: false,
     },
     hard: {
       base_pipe_speed: 3.35,
@@ -78,6 +101,7 @@ const CONFIG = {
       gap_shrink_per_pipe: 4,
       max_gap_shrink: 40,
       min_gap_size: 120,
+      pickups_enabled: false,
     },
     ultra: {
       base_pipe_speed: 4.1,
@@ -88,6 +112,7 @@ const CONFIG = {
       gap_shrink_per_pipe: 7,
       max_gap_shrink: 68,
       min_gap_size: 92,
+      pickups_enabled: true,
     },
   },
 } as const;
@@ -101,6 +126,11 @@ const MODE_LABELS: Record<GameMode, string> = {
 function randomGapY() {
   const { min_gap_y, max_gap_y } = CONFIG.pipes;
   return min_gap_y + Math.random() * (max_gap_y - min_gap_y);
+}
+
+function randomPickupY() {
+  const { min_y, max_y } = CONFIG.pickups;
+  return min_y + Math.random() * (max_y - min_y);
 }
 
 function currentPipeSpeed(mode: GameMode, score: number) {
@@ -119,6 +149,17 @@ function currentGapSize(mode: GameMode, score: number) {
   return Math.max(modeConfig.base_gap_size - shrink, modeConfig.min_gap_size);
 }
 
+function currentGravity(bird: PlayBird) {
+  const baseGravity = CONFIG.bird.gravity;
+  if (bird.active_effect === 'feather') {
+    return baseGravity * CONFIG.pickups.feather_gravity_multiplier;
+  }
+  if (bird.active_effect === 'anvil') {
+    return baseGravity * CONFIG.pickups.anvil_gravity_multiplier;
+  }
+  return baseGravity;
+}
+
 function spawnPipe(mode: GameMode, score: number): PlayPipe {
   return {
     x: CONFIG.world.screen_width + CONFIG.pipes.start_offset,
@@ -126,6 +167,15 @@ function spawnPipe(mode: GameMode, score: number): PlayPipe {
     gap_y: randomGapY(),
     gap_size: currentGapSize(mode, score),
     passed: false,
+  };
+}
+
+function spawnPickup(): PlayPickup {
+  return {
+    x: CONFIG.world.screen_width + CONFIG.pickups.start_offset,
+    y: randomPickupY(),
+    kind: Math.random() < 0.5 ? 'feather' : 'anvil',
+    radius: CONFIG.pickups.radius,
   };
 }
 
@@ -147,8 +197,11 @@ export function createInitialPlayState(mode: GameMode): PlayState {
       velocity: 0,
       alive: true,
       pipes_passed: 0,
+      active_effect: null,
+      effect_remaining_frames: 0,
     },
     pipes: [spawnPipe(mode, 0)],
+    pickups: [],
   };
 }
 
@@ -176,22 +229,39 @@ export function stepPlayState(state: PlayState): PlayState {
   }
 
   const pipeSpeed = currentPipeSpeed(state.mode, state.score);
-  const nextVelocity = Math.min(
-    state.bird.velocity + CONFIG.bird.gravity,
-    CONFIG.bird.max_fall_speed,
-  );
+  const nextEffectRemaining = Math.max((state.bird.effect_remaining_frames ?? 0) - 1, 0);
+  const activeEffect = nextEffectRemaining > 0 ? state.bird.active_effect ?? null : null;
+  const gravity = currentGravity({
+    ...state.bird,
+    active_effect: activeEffect,
+  });
+  const nextVelocity = Math.min(state.bird.velocity + gravity, CONFIG.bird.max_fall_speed);
   const nextBird: PlayBird = {
     ...state.bird,
     velocity: nextVelocity,
     y: state.bird.y + nextVelocity,
+    active_effect: activeEffect,
+    effect_remaining_frames: nextEffectRemaining,
   };
 
   const pipes = state.pipes
     .map((pipe) => ({ ...pipe, x: pipe.x - pipeSpeed }))
     .filter((pipe) => pipe.x + pipe.width >= 0);
 
+  const pickups = state.pickups
+    .map((pickup) => ({ ...pickup, x: pickup.x - pipeSpeed }))
+    .filter((pickup) => pickup.x + pickup.radius >= 0);
+
   if ((state.frame + 1) % CONFIG.pipes.spawn_interval === 0) {
     pipes.push(spawnPipe(state.mode, state.score));
+  }
+
+  if (
+    CONFIG.modes[state.mode].pickups_enabled &&
+    pickups.length < CONFIG.pickups.max_active_pickups &&
+    (state.frame + 1) % CONFIG.pickups.spawn_interval === 0
+  ) {
+    pickups.push(spawnPickup());
   }
 
   let score = state.score;
@@ -201,6 +271,27 @@ export function stepPlayState(state: PlayState): PlayState {
       score += 1;
     }
   }
+
+  let collectedEffect = nextBird.active_effect;
+  let collectedDuration = nextBird.effect_remaining_frames ?? 0;
+  const remainingPickups: PlayPickup[] = [];
+  for (const pickup of pickups) {
+    const dx = nextBird.x - pickup.x;
+    const dy = nextBird.y - pickup.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    if (distance <= nextBird.radius + pickup.radius) {
+      collectedEffect = pickup.kind;
+      collectedDuration =
+        pickup.kind === 'feather'
+          ? CONFIG.pickups.feather_duration_frames
+          : CONFIG.pickups.anvil_duration_frames;
+      continue;
+    }
+    remainingPickups.push(pickup);
+  }
+
+  nextBird.active_effect = collectedEffect;
+  nextBird.effect_remaining_frames = collectedDuration;
 
   const floorY = CONFIG.world.screen_height - CONFIG.world.ground_height;
   let gameOver =
@@ -239,6 +330,7 @@ export function stepPlayState(state: PlayState): PlayState {
       pipes_passed: score,
     },
     pipes,
+    pickups: remainingPickups,
   };
 }
 

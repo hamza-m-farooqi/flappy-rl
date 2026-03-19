@@ -23,6 +23,8 @@ export type GameState = {
     velocity: number;
     alive: boolean;
     genome_id?: string | null;
+    active_effect?: string | null;
+    effect_remaining_frames?: number;
   };
   birds?: Array<{
     x: number;
@@ -32,12 +34,20 @@ export type GameState = {
     alive: boolean;
     genome_id?: string | null;
     pipes_passed?: number;
+    active_effect?: string | null;
+    effect_remaining_frames?: number;
   }>;
   pipes: Array<{
     x: number;
     width: number;
     gap_y: number;
     gap_size: number;
+  }>;
+  pickups?: Array<{
+    x: number;
+    y: number;
+    kind: string;
+    radius: number;
   }>;
 };
 
@@ -145,6 +155,17 @@ export function GameCanvas({ gameState, overlayText }: GameCanvasProps) {
 
     const birds =
       gameState.birds && gameState.birds.length > 0 ? gameState.birds : [gameState.bird];
+
+    for (const pickup of gameState.pickups ?? []) {
+      context.beginPath();
+      context.arc(pickup.x, pickup.y, pickup.radius, 0, Math.PI * 2);
+      context.fillStyle =
+        pickup.kind === 'feather'
+          ? 'rgba(74, 142, 255, 0.88)'
+          : 'rgba(119, 127, 145, 0.92)';
+      context.fill();
+    }
+
     const livingBirds = birds.filter((bird) => bird.alive);
     for (const bird of livingBirds) {
       context.beginPath();
@@ -161,6 +182,18 @@ export function GameCanvas({ gameState, overlayText }: GameCanvasProps) {
     context.fillStyle = '#293338';
     context.font = 'bold 20px Georgia';
     context.fillText(`Score: ${gameState.score}`, 18, 30);
+    if (gameState.mode) {
+      context.font = 'bold 16px Georgia';
+      context.fillText(`Mode: ${gameState.mode}`, 18, 54);
+    }
+    if (gameState.bird.active_effect) {
+      context.font = 'bold 16px Georgia';
+      context.fillText(
+        `Effect: ${gameState.bird.active_effect}`,
+        18,
+        76,
+      );
+    }
 
     if (gameState.game_over || overlayText) {
       context.font = 'bold 28px Georgia';

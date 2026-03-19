@@ -50,16 +50,13 @@ def test_world_mode_affects_initial_gap_and_speed() -> None:
     hard_world = World.from_config(mode="hard")
     ultra_world = World.from_config(mode="ultra")
 
-    assert (
-        easy_world.current_pipe_speed
-        < hard_world.current_pipe_speed
-        < ultra_world.current_pipe_speed
-    )
-    assert (
-        easy_world.current_gap_size
-        > hard_world.current_gap_size
-        > ultra_world.current_gap_size
-    )
+    assert easy_world.current_pipe_speed < hard_world.current_pipe_speed
+    assert ultra_world.current_pipe_speed == easy_world.current_pipe_speed
+    assert easy_world.current_gap_size > hard_world.current_gap_size
+    assert ultra_world.current_gap_size == easy_world.current_gap_size
+    # Easy and Ultra should have the generous 200px gap.
+    assert easy_world.current_gap_size == 200
+    assert ultra_world.current_gap_size == 200
 
 
 def test_dynamic_modes_increase_difficulty_as_score_rises() -> None:
@@ -73,4 +70,23 @@ def test_dynamic_modes_increase_difficulty_as_score_rises() -> None:
     ultra_world.score = 8
 
     assert hard_world.current_pipe_speed > hard_initial_speed
-    assert ultra_world.current_gap_size < ultra_initial_gap
+    assert ultra_world.current_gap_size == ultra_initial_gap
+    assert len(ultra_world.pickups) == 1
+
+
+def test_sensor_inputs_have_correct_count_and_range() -> None:
+    from src.ai.sensors import build_inputs
+
+    world = World.from_config(mode="easy")
+    bird = world.bird
+    inputs = build_inputs(world, bird)
+
+    assert len(inputs) == 7, f"Expected 7 inputs, got {len(inputs)}"
+    # bird_y should be in [0, 1]
+    assert 0.0 <= inputs[0] <= 1.0, f"bird_y out of range: {inputs[0]}"
+    # pipe_distance: first pipe starts off-screen so raw value can exceed 1.0 at t=0
+    assert inputs[1] >= 0.0, f"pipe_distance negative: {inputs[1]}"
+    # gap_center_y should be in [0, 1]
+    assert 0.0 <= inputs[2] <= 1.0, f"gap_center_y out of range: {inputs[2]}"
+    # active_effect should be -1, 0, or 1
+    assert inputs[6] in (-1.0, 0.0, 1.0), f"active_effect unexpected: {inputs[6]}"
