@@ -1,5 +1,5 @@
 import { Suspense, lazy, startTransition, useEffect, useRef, useState } from 'react';
-import { GameCanvas, type NetworkGraphData, type TrainingFrame, type TrainingHistoryPoint } from '../components/GameCanvas';
+import { GameCanvas, type NetworkGraphData, type TrainingHistoryPoint } from '../components/GameCanvas';
 import { useTrainingSocket } from '../hooks/useTrainingSocket';
 
 const MetricsChart = lazy(async () => {
@@ -13,96 +13,62 @@ const NetworkGraph = lazy(async () => {
 });
 
 export function TrainingPage() {
-  const { liveFrame, uiFrame, status, errorMessage, trainingStatus } = useTrainingSocket();
+  // selectedRunName drives the WS connection — the hook reconnects automatically
+  // when this changes so only the chosen run's frames arrive.
+  const [selectedRunName, setSelectedRunName] = useState<string | null>(null);
+  const { liveFrame, uiFrame, status, errorMessage, trainingStatus } =
+    useTrainingSocket(selectedRunName);
+
   const [insightHistory, setInsightHistory] = useState<TrainingHistoryPoint[]>([]);
   const [insightNetwork, setInsightNetwork] = useState<NetworkGraphData | null>(null);
   const [showMetrics, setShowMetrics] = useState(false);
   const [showNetwork, setShowNetwork] = useState(false);
-  const [selectedRunName, setSelectedRunName] = useState<string | null>(null);
-  // Filtered frames — only updated when frame.run_name matches selectedRunName.
-  // Keeping these in state (not computed inline) prevents flickering when frames
-  // from other concurrent runs arrive and would otherwise momentarily null-out the display.
-  const [filteredLiveFrame, setFilteredLiveFrame] = useState<TrainingFrame | null>(null);
-  const [filteredUiFrame, setFilteredUiFrame] = useState<TrainingFrame | null>(null);
   const lastHistoryLengthRef = useRef(0);
   const lastNetworkFrameRef = useRef(-1);
 
   const activeRunNames: string[] = trainingStatus?.active_run_names ?? [];
+  const frame = uiFrame ?? liveFrame;
 
-  // Auto-select the first active run if nothing is selected (or if selected run stopped)
+  // Auto-select the first active run; fall back when selected run stops.
   useEffect(() => {
     if (activeRunNames.length === 0) {
       setSelectedRunName(null);
       return;
     }
-    // If current selection is gone, fall back to the first available run
     if (selectedRunName === null || !activeRunNames.includes(selectedRunName)) {
       setSelectedRunName(activeRunNames[0] ?? null);
     }
   }, [activeRunNames, selectedRunName]);
 
-  // Accept incoming live frames only if they belong to the selected run.
-  // Frames from other runs are silently dropped so the display doesn't flicker.
-  useEffect(() => {
-    if (!liveFrame) return;
-    if (selectedRunName === null || liveFrame.run_name === selectedRunName) {
-      setFilteredLiveFrame(liveFrame);
-    }
-  }, [liveFrame, selectedRunName]);
-
-  useEffect(() => {
-    if (!uiFrame) return;
-    if (selectedRunName === null || uiFrame.run_name === selectedRunName) {
-      setFilteredUiFrame(uiFrame);
-    }
-  }, [uiFrame, selectedRunName]);
-
-  const frame = filteredUiFrame ?? filteredLiveFrame;
-
-  useEffect(() => {
-    if (!filteredUiFrame) {
-      return;
-    }
-
-    const history = filteredUiFrame.history;
-
-    if (
-      history &&
-      (
-        history.length !== lastHistoryLengthRef.current ||
-        filteredUiFrame.generation_complete
-      )
-    ) {
-      lastHistoryLengthRef.current = history.length;
-      startTransition(() => {
-        setInsightHistory(history);
-      });
-    }
-
-    if (
-      filteredUiFrame.focus_network &&
-      (
-        filteredUiFrame.generation_complete ||
-        filteredUiFrame.champion_saved_this_generation ||
-        filteredUiFrame.frame - lastNetworkFrameRef.current >= 10
-      )
-    ) {
-      lastNetworkFrameRef.current = filteredUiFrame.frame;
-      startTransition(() => {
-        setInsightNetwork(filteredUiFrame.focus_network ?? null);
-      });
-    }
-  }, [filteredUiFrame]);
-
-  // Reset everything when switching runs so stale frames don't linger
+  // Reset charts when switching runs.
   useEffect(() => {
     setInsightHistory([]);
     setInsightNetwork(null);
-    setFilteredLiveFrame(null);
-    setFilteredUiFrame(null);
     lastHistoryLengthRef.current = 0;
     lastNetworkFrameRef.current = -1;
   }, [selectedRunName]);
+
+  useEffect(() => {
+    if (!uiFrame) return;
+
+    const history = uiFrame.history;
+    if (history && (history.length !== lastHistoryLengthRef.current || uiFrame.generation_complete)) {
+      lastHistoryLengthRef.current = history.length;
+      startTransition(() => { setInsightHistory(history); });
+    }
+
+    if (
+      uiFrame.focus_network &&
+      (
+        uiFrame.generation_complete ||
+        uiFrame.champion_saved_this_generation ||
+        uiFrame.frame - lastNetworkFrameRef.current >= 10
+      )
+    ) {
+      lastNetworkFrameRef.current = uiFrame.frame;
+      startTransition(() => { setInsightNetwork(uiFrame.focus_network ?? null); });
+    }
+  }, [uiFrame]);
 
   const generationEndMessage =
     frame?.generation_complete && frame.generation_end_reason
@@ -155,7 +121,7 @@ export function TrainingPage() {
       ) : null}
 
       {errorMessage ? <p className="status-banner error">{errorMessage}</p> : null}
-      {!filteredLiveFrame && !errorMessage ? (
+      {!liveFrame && !errorMessage ? (
         <p className="status-banner">
           {status === 'connecting'
             ? 'Connecting to live training stream...'
@@ -165,7 +131,7 @@ export function TrainingPage() {
         </p>
       ) : null}
 
-      {filteredLiveFrame && frame ? (
+      {liveFrame && frame ? (
         <>
           {frame.champion_saved_this_generation ? (
             <p className="status-banner success">
@@ -176,7 +142,7 @@ export function TrainingPage() {
           {generationEndMessage ? <p className="status-banner">{generationEndMessage}</p> : null}
           <div className="content-grid">
             <div className="canvas-panel">
-              <GameCanvas gameState={filteredLiveFrame} />
+              <GameCanvas gameState={liveFrame} />
             </div>
             <div className="stats-panel">
               <div className="training-stats training-stats-compact">
@@ -255,7 +221,7 @@ export function TrainingPage() {
               <button
                 type="button"
                 className="accordion-summary accordion-button"
-                onClick={() => setShowMetrics((current) => !current)}
+                onClick={() => setShowMetrics((c) => !c)}
               >
                 <div>
                   <h2>Training Metrics</h2>
@@ -276,7 +242,7 @@ export function TrainingPage() {
               <button
                 type="button"
                 className="accordion-summary accordion-button"
-                onClick={() => setShowNetwork((current) => !current)}
+                onClick={() => setShowNetwork((c) => !c)}
               >
                 <div>
                   <h2>Current Best Network</h2>
@@ -287,10 +253,7 @@ export function TrainingPage() {
               {showNetwork ? (
                 <div className="accordion-content">
                   <Suspense fallback={<div className="network-empty"><p>Loading network...</p></div>}>
-                    <NetworkGraph
-                      network={insightNetwork}
-                      title="Current Best Network"
-                    />
+                    <NetworkGraph network={insightNetwork} title="Current Best Network" />
                   </Suspense>
                 </div>
               ) : null}

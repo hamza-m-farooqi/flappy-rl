@@ -226,6 +226,7 @@ class NeatTrainer:
             )
 
             connection_manager.broadcast_state(
+                self.run_name,
                 {
                     **self._build_training_payload(
                         world=world,
@@ -236,7 +237,7 @@ class NeatTrainer:
                         generation_end_reason=None,
                     ),
                     **world.serialize(),
-                }
+                },
             )
             time.sleep(frame_delay_ms / 1000)
 
@@ -273,6 +274,7 @@ class NeatTrainer:
             self.last_saved_generation = self.generation
             self.last_checkpoint_path = str(checkpoint_path)
             connection_manager.broadcast_state(
+                self.run_name,
                 {
                     **self._build_training_payload(
                         world=world,
@@ -292,10 +294,11 @@ class NeatTrainer:
                         include_history=True,
                     ),
                     **world.serialize(),
-                }
+                },
             )
         else:
             connection_manager.broadcast_state(
+                self.run_name,
                 {
                     **self._build_training_payload(
                         world=world,
@@ -308,7 +311,7 @@ class NeatTrainer:
                         include_history=True,
                     ),
                     **world.serialize(),
-                }
+                },
             )
 
     def _build_training_payload(

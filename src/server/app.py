@@ -42,15 +42,15 @@ def create_app() -> FastAPI:
             "active_run_names": status["active_run_names"],
         }
 
-    @app.websocket("/ws/training")
-    async def training_socket(websocket: WebSocket) -> None:
-        """Stream live training frames to connected browser clients."""
-        await connection_manager.connect(websocket)
+    @app.websocket("/ws/training/{run_name}")
+    async def training_socket(websocket: WebSocket, run_name: str) -> None:
+        """Stream live training frames for a specific named run."""
+        await connection_manager.connect(websocket, run_name)
         try:
             while True:
                 await websocket.receive_text()
         except WebSocketDisconnect:
-            connection_manager.disconnect(websocket)
+            connection_manager.disconnect(websocket, run_name)
 
     app.include_router(game_router)
     app.include_router(leaderboard_router)
