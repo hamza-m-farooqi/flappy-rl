@@ -22,6 +22,18 @@ mode using a saved champion genome.
 - leaderboard page and browser score submission flow
 - shared game configuration via `config/game.toml`
 
+## UI Showcase
+
+<div align="center">
+  <img src="assets/home.png" width="100%" alt="Home Page" />
+  <p align="center"><em>Main Dashboard and Overview</em></p>
+</div>
+
+| Play Mode | Training Monitor |
+| :---: | :---: |
+| <img src="assets/play.png" width="400" alt="Play Mode" /> | <img src="assets/training.png" width="400" alt="Training Monitor" /> |
+| *Direct Browser Controls* | *Real-time Neuroevolution Progress* |
+
 ## Stack
 
 - Python 3.10+
@@ -36,6 +48,7 @@ mode using a saved champion genome.
 
 ```text
 flappy-rl/
+├── assets/              # Showcase images and screenshots
 ├── config/              # Game and NEAT configuration
 ├── checkpoints/         # Named training run directories and saved champions
 ├── src/
