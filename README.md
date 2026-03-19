@@ -1,5 +1,10 @@
 # flappy-rl
 
+<div align="center">
+  <img src="assets/home.png" width="100%" alt="flappy-rl home page" />
+  <p align="center"><em>Real-time Neuroevolution Monitoring & Visualization for Flappy Bird</em></p>
+</div>
+
 `flappy-rl` is a browser-first Flappy Bird + neuroevolution project built with a Python
 backend and a React frontend. It currently supports local human play, live browser-based
 training visualization, MongoDB-backed leaderboard submissions, and human-vs-AI compete
@@ -25,8 +30,8 @@ mode using a saved champion genome.
 ## UI Showcase
 
 <div align="center">
-  <img src="assets/home.png" width="100%" alt="Home Page" />
-  <p align="center"><em>Main Dashboard and Overview</em></p>
+  <img src="assets/flappy-rl-training.gif" width="100%" alt="Live Training Demo" />
+  <p align="center"><em>Visualizing server-side Neuroevolution in real-time</em></p>
 </div>
 
 | Play Mode | Training Monitor |
