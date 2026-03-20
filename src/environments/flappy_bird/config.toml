@@ -1,0 +1,78 @@
+[world]
+screen_width = 800
+screen_height = 600
+ground_height = 80
+fps = 60
+
+[bird]
+start_x = 160
+start_y = 300
+radius = 18
+gravity = 0.45
+jump_velocity = -8.5
+max_fall_speed = 10.0
+
+[pipes]
+width = 72
+gap_size = 200
+speed = 3.0
+spawn_interval = 120
+start_offset = 320
+min_gap_y = 120
+max_gap_y = 420
+
+[training]
+max_frames_per_generation = 10000
+frame_delay_ms = 16
+checkpoint_generation_interval = 5
+
+[pickups]
+radius = 16
+spawn_interval = 150
+start_offset = 120
+min_y = 150
+max_y = 360
+max_active_pickups = 1
+feather_duration_frames = 170
+feather_gravity_multiplier = 0.55
+anvil_duration_frames = 150
+anvil_gravity_multiplier = 1.75
+
+[modes.easy]
+label = "Easy"
+description = "Classic flappy pacing with a stable gap and pipe speed."
+base_pipe_speed = 3.0
+base_gap_size = 200
+dynamic_difficulty = false
+speed_increase_per_pipe = 0.0
+max_speed_bonus = 0.0
+gap_shrink_per_pipe = 0
+max_gap_shrink = 0
+min_gap_size = 200
+pickups_enabled = false
+
+[modes.hard]
+label = "Hard"
+description = "Difficulty ramps up as the run goes on with faster pipes and tighter gaps."
+base_pipe_speed = 3.35
+base_gap_size = 180
+dynamic_difficulty = true
+speed_increase_per_pipe = 0.12
+max_speed_bonus = 1.4
+gap_shrink_per_pipe = 4
+max_gap_shrink = 40
+min_gap_size = 140
+pickups_enabled = false
+
+[modes.ultra]
+label = "Ultra"
+description = "Classic flappy pacing plus collectible feather and anvil effects."
+base_pipe_speed = 3.0
+base_gap_size = 200
+dynamic_difficulty = false
+speed_increase_per_pipe = 0.0
+max_speed_bonus = 0.0
+gap_shrink_per_pipe = 0
+max_gap_shrink = 0
+min_gap_size = 200
+pickups_enabled = true

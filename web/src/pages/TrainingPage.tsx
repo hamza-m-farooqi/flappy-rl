@@ -1,4 +1,4 @@
-import { Suspense, lazy, startTransition, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, startTransition, useEffect, useMemo, useRef, useState } from 'react';
 import { GameCanvas, type NetworkGraphData, type TrainingHistoryPoint } from '../components/GameCanvas';
 import { useTrainingSocket } from '../hooks/useTrainingSocket';
 
@@ -29,16 +29,53 @@ export function TrainingPage() {
   const activeRunNames: string[] = trainingStatus?.active_run_names ?? [];
   const frame = uiFrame ?? liveFrame;
 
-  // Auto-select the first active run; fall back when selected run stops.
+  // Build a map of run_name → env_id from the training status
+  const runEnvMap: Record<string, string> = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const run of trainingStatus?.runs ?? []) {
+      if (run.env_id) map[run.run_name] = run.env_id;
+    }
+    return map;
+  }, [trainingStatus]);
+
+  // Env filter — unique envs across active runs
+  const activeEnvIds = useMemo(() => {
+    const envSet = new Set<string>();
+    for (const name of activeRunNames) {
+      envSet.add(runEnvMap[name] ?? 'flappy_bird');
+    }
+    return [...envSet].sort();
+  }, [activeRunNames, runEnvMap]);
+
+  const [envFilter, setEnvFilter] = useState<string | null>(null);
+
+  // Auto-select env filter when envs appear
   useEffect(() => {
-    if (activeRunNames.length === 0) {
+    if (activeEnvIds.length === 0) {
+      setEnvFilter(null);
+    } else if (envFilter === null || !activeEnvIds.includes(envFilter)) {
+      setEnvFilter(activeEnvIds[0] ?? null);
+    }
+  }, [activeEnvIds, envFilter]);
+
+  // Filtered run names (by env)
+  const filteredRunNames = useMemo(() => {
+    if (!envFilter) return activeRunNames;
+    return activeRunNames.filter(
+      (name) => (runEnvMap[name] ?? 'flappy_bird') === envFilter,
+    );
+  }, [activeRunNames, envFilter, runEnvMap]);
+
+  // Auto-select the first run in the filtered set; fall back when selected run leaves.
+  useEffect(() => {
+    if (filteredRunNames.length === 0) {
       setSelectedRunName(null);
       return;
     }
-    if (selectedRunName === null || !activeRunNames.includes(selectedRunName)) {
-      setSelectedRunName(activeRunNames[0] ?? null);
+    if (selectedRunName === null || !filteredRunNames.includes(selectedRunName)) {
+      setSelectedRunName(filteredRunNames[0] ?? null);
     }
-  }, [activeRunNames, selectedRunName]);
+  }, [filteredRunNames, selectedRunName]);
 
   // Reset charts when switching runs.
   useEffect(() => {
@@ -85,28 +122,49 @@ export function TrainingPage() {
     <section className="page page-training">
       <div className="page-heading">
         <div className="heading-copy">
-          <p className="eyebrow">Training</p>
+          <p className="eyebrow">NeuroArena · Training</p>
           <h1>Live Evolution Monitor</h1>
           <p className="lede">
-            Watch the live training swarm over WebSocket as generations rise and the birds
-            learn to survive longer.
+            NEAT evolves a population of neural networks across generations. Every simulation
+            frame streams to this page over WebSocket — watch the swarm shrink as birds die,
+            fitness climb as survivors improve, and the champion network topology grow in
+            complexity.
           </p>
         </div>
         <div className="heading-side">
           <span className={`status-chip ${isLive ? 'live' : 'idle'}`}>
             {isLive
               ? `${activeRunNames.length} run${activeRunNames.length > 1 ? 's' : ''} active`
-              : 'Trainer idle'}
+              : 'No active run'}
           </span>
         </div>
       </div>
 
-      {/* Run selector — only shown when 2+ runs are active */}
-      {activeRunNames.length > 1 ? (
+      {/* Env filter tabs — shown when active runs span more than one environment */}
+      {activeEnvIds.length > 1 ? (
         <div className="run-selector">
-          <span className="run-selector-label">Monitoring:</span>
+          <span className="run-selector-label">Game:</span>
           <div className="run-selector-tabs">
-            {activeRunNames.map((name) => (
+            {activeEnvIds.map((envId) => (
+              <button
+                key={envId}
+                type="button"
+                className={`run-tab ${envFilter === envId ? 'run-tab-active' : ''}`}
+                onClick={() => setEnvFilter(envId)}
+              >
+                {envId.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Run selector — only shown when 2+ runs are active within the selected env */}
+      {filteredRunNames.length > 1 ? (
+        <div className="run-selector">
+          <span className="run-selector-label">Run:</span>
+          <div className="run-selector-tabs">
+            {filteredRunNames.map((name) => (
               <button
                 key={name}
                 type="button"
@@ -125,9 +183,9 @@ export function TrainingPage() {
         <p className="status-banner">
           {status === 'connecting'
             ? 'Connecting to live training stream...'
-            : activeRunNames.length > 0
-              ? `Waiting for live frames from ${selectedRunName ?? activeRunNames[0] ?? 'the active run'}...`
-              : 'No training is currently running. Start or resume a run from the Admin page.'}
+            : filteredRunNames.length > 0
+              ? `Waiting for live frames from ${selectedRunName ?? filteredRunNames[0] ?? 'the active run'}...`
+              : 'No training is currently running. Start or resume a run from the Admin page, then return here to watch it evolve.'}
         </p>
       ) : null}
 
@@ -146,6 +204,10 @@ export function TrainingPage() {
             </div>
             <div className="stats-panel">
               <div className="training-stats training-stats-compact">
+                <div className="stat-pill stat-pill-compact">
+                  <span className="stat-label">Environment</span>
+                  <span className="stat-value">{frame.env_id ?? 'flappy_bird'}</span>
+                </div>
                 <div className="stat-pill stat-pill-compact">
                   <span className="stat-label">Run</span>
                   <span className="stat-value">{frame.run_name}</span>

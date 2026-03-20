@@ -92,6 +92,7 @@ export type NetworkGraphData = {
 
 export type TrainingFrame = GameState & {
   type: 'training_frame';
+  env_id?: string;
   run_name: string;
   generation: number;
   alive_count: number;

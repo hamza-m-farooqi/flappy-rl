@@ -5,12 +5,26 @@ import { API_BASE_URL } from '../config/env';
 import { listGameModes, type GameMode } from '../game/engine';
 import { usePlaySession } from '../hooks/usePlaySession';
 
+// Registered playable environments. Extend this list as new envs ship.
+const REGISTERED_ENVS: { env_id: string; label: string }[] = [
+  { env_id: 'flappy_bird', label: 'Flappy Bird' },
+  // { env_id: 'trex_run', label: 'T-Rex Run' }, // uncomment when implemented
+];
+
 export function PlayPage() {
+  const [envId, setEnvId] = useState('flappy_bird');
   const [mode, setMode] = useState<GameMode>('easy');
   const { hasStarted, playState, restart } = usePlaySession(mode);
   const [username, setUsername] = useState('');
   const [submitState, setSubmitState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const activeEnvLabel = REGISTERED_ENVS.find((e) => e.env_id === envId)?.label ?? envId;
+
+  const handleEnvChange = (newEnvId: string) => {
+    setEnvId(newEnvId);
+    restart();
+  };
 
   const submitScore = async () => {
     if (!playState.game_over || !username.trim()) {
@@ -35,13 +49,13 @@ export function PlayPage() {
     <section className="page page-play">
       <div className="page-heading">
         <div className="heading-copy">
-          <p className="eyebrow">Play</p>
-          {/* <h1>Browser Play Mode</h1> */}
-          {/* <p className="lede">
-            Local physics run directly in the browser for instant jump response. Press
-            <code>Start Game</code> or <code>Space</code> to begin, then keep using
-            <code>Space</code> or tap to fly. Press <code>R</code> to restart anytime.
-          </p> */}
+          <p className="eyebrow">NeuroArena · {activeEnvLabel} · Play</p>
+          <h1>Browser Play Mode</h1>
+          <p className="lede">
+            Client-side physics run directly in your browser for instant response. Choose a
+            game and difficulty mode, press <code>Space</code> to start, and keep tapping to
+            fly. Submit your score to the global leaderboard when the run ends.
+          </p>
         </div>
         <div className="heading-side">
           <span className={`status-chip ${playState.game_over ? 'idle' : hasStarted ? 'live' : 'idle'}`}>
@@ -52,6 +66,26 @@ export function PlayPage() {
 
       <div className="content-grid">
         <div className="canvas-panel">
+          {/* Game / environment selector */}
+          {REGISTERED_ENVS.length > 1 ? (
+            <div className="mode-switcher">
+              {REGISTERED_ENVS.map((env) => (
+                <button
+                  key={env.env_id}
+                  type="button"
+                  className={env.env_id === envId ? 'mode-chip active' : 'mode-chip'}
+                  onClick={() => handleEnvChange(env.env_id)}
+                >
+                  {env.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="mode-switcher env-switcher-single">
+              <span className="env-label-single">{activeEnvLabel}</span>
+            </div>
+          )}
+          {/* Difficulty mode chips */}
           <div className="mode-switcher">
             {listGameModes().map((option) => (
               <button
@@ -72,6 +106,10 @@ export function PlayPage() {
 
         <div className="stats-panel">
           <div className="training-stats">
+            <div className="stat-pill">
+              <span className="stat-label">Environment</span>
+              <span className="stat-value">{activeEnvLabel}</span>
+            </div>
             <div className="stat-pill">
               <span className="stat-label">Mode</span>
               <span className="stat-value">{mode}</span>
@@ -99,27 +137,27 @@ export function PlayPage() {
           <div className="split-header">
             <div>
               <h2>Pilot controls</h2>
-              <p>Use keyboard or pointer input exactly as before.</p>
+              <p>Keyboard and pointer input both supported.</p>
             </div>
           </div>
           <ul className="bullet-list">
-            <li>Press <code>Space</code> to jump and to start.</li>
-            <li>Press <code>R</code> to reset at any time.</li>
-            <li>Tap or click during a live run for pointer-based jumps.</li>
+            <li>Press <code>Space</code> to jump and to start the game.</li>
+            <li>Press <code>R</code> to restart at any time.</li>
+            <li>Tap or click anywhere during a live run for pointer-based jumps.</li>
           </ul>
 
           {playState.game_over ? (
             <div className="submit-panel">
               <div className="submit-copy">
                 <h2>Submit your score</h2>
-                <p>Save this run to the leaderboard, or restart and try for a better score.</p>
+                <p>Save this run to the global leaderboard, or restart and try for a better score.</p>
               </div>
               <div className="submit-form">
                 <input
                   className="text-input"
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
-                  placeholder="ChampionUser"
+                  placeholder="YourHandleHere"
                   maxLength={32}
                 />
                 <button className="action-button" onClick={submitScore} disabled={submitState === 'saving'}>
@@ -138,8 +176,8 @@ export function PlayPage() {
             </div>
           ) : (
             <div className="panel-card">
-              <h2>Leaderboard ready</h2>
-              <p>Once the run ends, the score submission panel appears here without changing the original flow.</p>
+              <h2>Leaderboard</h2>
+              <p>Once the round ends, the score submission panel appears here. You can also view all scores on the <a href="/leaderboard">Leaderboard</a> page.</p>
             </div>
           )}
         </div>

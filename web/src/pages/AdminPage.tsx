@@ -4,6 +4,7 @@ import { API_BASE_URL } from '../config/env';
 
 type RunSummary = {
   run_name: string;
+  env_id: string;
   mode: string;
   has_champion: boolean;
   has_training_checkpoint: boolean;
@@ -24,16 +25,26 @@ type OverrideParameter = {
   default: number;
 };
 
+type GameMode = {
+  key: string;
+  label: string;
+  description: string;
+};
+
+type EnvironmentInfo = {
+  env_id: string;
+  label: string;
+  game_modes: GameMode[];
+  override_parameters: OverrideParameter[];
+};
+
 type TrainingStatus = {
   is_running: boolean;
   active_run_names: string[];
   runs: RunSummary[];
-  override_parameters: OverrideParameter[];
-  game_modes: Array<{
-    key: string;
-    label: string;
-    description: string;
-  }>;
+  // Legacy global fields (still present for backward compat)
+  override_parameters?: OverrideParameter[];
+  game_modes?: GameMode[];
 };
 
 type LoginResponse = {
@@ -41,14 +52,16 @@ type LoginResponse = {
   token_type: string;
 };
 
-const ADMIN_TOKEN_KEY = 'flappy_rl_admin_token';
+const ADMIN_TOKEN_KEY = 'neuro_arena_admin_token';
 
 export function AdminPage() {
   const [password, setPassword] = useState('');
   const [trainingName, setTrainingName] = useState('');
   const [trainingMode, setTrainingMode] = useState('easy');
+  const [selectedEnvId, setSelectedEnvId] = useState('flappy_bird');
   const [neatOverrides, setNeatOverrides] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<TrainingStatus | null>(null);
+  const [environments, setEnvironments] = useState<EnvironmentInfo[]>([]);
   const [requestState, setRequestState] = useState<'idle' | 'loading'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(ADMIN_TOKEN_KEY));
@@ -58,6 +71,14 @@ export function AdminPage() {
     () => (token ? { Authorization: `Bearer ${token}` } : undefined),
     [token],
   );
+
+  // Derive env-specific game modes and NEAT override params from the loaded environments list
+  const activeEnv = useMemo(
+    () => environments.find((e) => e.env_id === selectedEnvId) ?? null,
+    [environments, selectedEnvId],
+  );
+  const currentGameModes: GameMode[] = activeEnv?.game_modes ?? [];
+  const currentOverrideParameters: OverrideParameter[] = activeEnv?.override_parameters ?? [];
 
   const loadStatus = useCallback(
     async (authToken = token) => {
@@ -71,7 +92,6 @@ export function AdminPage() {
         });
         setStatus(response.data);
         setErrorMessage(null);
-        // Clear stopping state for runs that are no longer active
         setStoppingRuns((current) => {
           const active = new Set(response.data.active_run_names);
           const next = new Set([...current].filter((name) => active.has(name)));
@@ -89,12 +109,37 @@ export function AdminPage() {
     [token],
   );
 
+  const loadEnvironments = useCallback(
+    async (authToken = token) => {
+      if (!authToken) return;
+      try {
+        const response = await axios.get<{ environments: EnvironmentInfo[] }>(
+          `${API_BASE_URL}/admin/environments`,
+          { headers: { Authorization: `Bearer ${authToken}` } },
+        );
+        setEnvironments(response.data.environments);
+        // Auto-select first env and its first mode
+        if (response.data.environments.length > 0) {
+          const first = response.data.environments[0];
+          setSelectedEnvId(first.env_id);
+          if (first.game_modes.length > 0) {
+            setTrainingMode(first.game_modes[0].key);
+          }
+        }
+      } catch {
+        // Environments endpoint may not be available yet — fall back silently
+      }
+    },
+    [token],
+  );
+
   useEffect(() => {
     if (!token) {
       return;
     }
 
     void loadStatus(token);
+    void loadEnvironments(token);
     const intervalId = window.setInterval(() => {
       void loadStatus(token);
     }, 3000);
@@ -102,7 +147,17 @@ export function AdminPage() {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [loadStatus, token]);
+  }, [loadStatus, loadEnvironments, token]);
+
+  // When user changes the env selector, reset mode to that env's first mode
+  const handleEnvChange = (envId: string) => {
+    setSelectedEnvId(envId);
+    setNeatOverrides({});
+    const env = environments.find((e) => e.env_id === envId);
+    if (env && env.game_modes.length > 0) {
+      setTrainingMode(env.game_modes[0].key);
+    }
+  };
 
   const login = async () => {
     try {
@@ -115,6 +170,7 @@ export function AdminPage() {
       setToken(response.data.access_token);
       setPassword('');
       await loadStatus(response.data.access_token);
+      await loadEnvironments(response.data.access_token);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Admin login failed.');
     } finally {
@@ -131,7 +187,7 @@ export function AdminPage() {
 
   const runAction = async (
     path: string,
-    payload?: { run_name: string; mode?: string; neat_overrides?: Record<string, number> },
+    payload?: { run_name: string; env_id?: string; mode?: string; neat_overrides?: Record<string, number> },
   ) => {
     if (!headers) {
       return;
@@ -144,7 +200,6 @@ export function AdminPage() {
       await loadStatus();
       if (path === '/admin/training/start') {
         setTrainingName('');
-        setTrainingMode('easy');
         setNeatOverrides({});
       }
     } catch (error) {
@@ -181,10 +236,11 @@ export function AdminPage() {
       <section className="page page-training">
         <div className="page-heading">
           <div className="heading-copy">
-            <p className="eyebrow">Admin</p>
+            <p className="eyebrow">NeuroArena · Admin</p>
             <h1>Admin Login</h1>
             <p className="lede">
-              Enter the server-side admin password to manage named training runs.
+              Enter the server-side admin password to unlock training controls. You can start
+              new NEAT runs, resume from checkpoints, and stop any active run from this panel.
             </p>
           </div>
           <div className="heading-side">
@@ -220,10 +276,12 @@ export function AdminPage() {
     <section className="page page-training">
       <div className="page-heading">
         <div className="heading-copy">
-          <p className="eyebrow">Admin</p>
+          <p className="eyebrow">NeuroArena · Admin</p>
           <h1>Training Control</h1>
           <p className="lede">
-            Start, resume, and stop named training runs. Multiple runs can train concurrently.
+            Start, resume, and stop named NEAT training runs. Each run evolves independently
+            with its own champion, checkpoint folder, and WebSocket channel. Multiple runs
+            can train concurrently.
           </p>
         </div>
         <div className="heading-side">
@@ -245,9 +303,48 @@ export function AdminPage() {
       <div className="submit-panel">
         <div className="submit-copy">
           <h2>Start a new training run</h2>
-          <p>Each run gets its own folder under <code>checkpoints/</code>. Multiple runs can train at the same time.</p>
+          <p>
+            Choose a game, pick a difficulty, give the run a name. Each run gets its own
+            checkpoint folder under <code>checkpoints/{selectedEnvId}/</code>.
+          </p>
         </div>
         <div className="submit-form">
+          {/* Game / environment selector */}
+          {environments.length > 0 ? (
+            <select
+              className="text-input mode-select"
+              value={selectedEnvId}
+              onChange={(event) => handleEnvChange(event.target.value)}
+            >
+              {environments.map((env) => (
+                <option key={env.env_id} value={env.env_id}>
+                  {env.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <select className="text-input mode-select" value={selectedEnvId} disabled>
+              <option value="flappy_bird">Flappy Bird</option>
+            </select>
+          )}
+          {/* Difficulty mode selector — updates when env changes */}
+          <select
+            className="text-input mode-select"
+            value={trainingMode}
+            onChange={(event) => setTrainingMode(event.target.value)}
+          >
+            {currentGameModes.length > 0
+              ? currentGameModes.map((mode) => (
+                  <option key={mode.key} value={mode.key}>
+                    {mode.label}
+                  </option>
+                ))
+              : (status?.game_modes ?? []).map((mode) => (
+                  <option key={mode.key} value={mode.key}>
+                    {mode.label}
+                  </option>
+                ))}
+          </select>
           <input
             className="text-input"
             value={trainingName}
@@ -255,23 +352,13 @@ export function AdminPage() {
             placeholder="spring-champion-run"
             maxLength={64}
           />
-          <select
-            className="text-input mode-select"
-            value={trainingMode}
-            onChange={(event) => setTrainingMode(event.target.value)}
-          >
-            {(status?.game_modes ?? []).map((mode) => (
-              <option key={mode.key} value={mode.key}>
-                {mode.label}
-              </option>
-            ))}
-          </select>
           <button
             className="action-button"
             disabled={requestState === 'loading' || !trainingName.trim()}
             onClick={() =>
               void runAction('/admin/training/start', {
                 run_name: trainingName,
+                env_id: selectedEnvId,
                 mode: trainingMode,
                 neat_overrides: Object.fromEntries(
                   Object.entries(neatOverrides)
@@ -290,12 +377,18 @@ export function AdminPage() {
         <summary className="accordion-summary">
           <div>
             <h2>NEAT run tuning</h2>
-            <p>Override selected evolution parameters for a new run without editing files.</p>
+            <p>
+              Override evolution parameters for <strong>{activeEnv?.label ?? selectedEnvId}</strong>.
+              Defaults are read from that environment's <code>neat.cfg</code>.
+            </p>
           </div>
           <span className="inline-note">Applied only when starting a fresh run</span>
         </summary>
         <div className="override-grid accordion-content">
-          {(status?.override_parameters ?? []).map((parameter) => (
+          {(currentOverrideParameters.length > 0
+            ? currentOverrideParameters
+            : status?.override_parameters ?? []
+          ).map((parameter) => (
             <label key={parameter.key} className="override-card">
               <div className="override-copy">
                 <span className="override-label">{parameter.label}</span>
@@ -349,7 +442,7 @@ export function AdminPage() {
         <div className="leaderboard-shell">
           <div className="leaderboard-head leaderboard-row">
             <span>Run</span>
-            <span>Champion</span>
+            <span>Game · Mode</span>
             <span>Best Score</span>
             <span>Actions</span>
           </div>
@@ -361,6 +454,7 @@ export function AdminPage() {
               <div key={run.run_name} className="leaderboard-row">
                 <span className="row-emphasis">{run.run_name}</span>
                 <span>
+                  {(run.env_id ?? 'flappy_bird').replace('_', ' ')} ·{' '}
                   {run.has_champion
                     ? `${run.mode} · Gen ${run.last_saved_generation ?? '-'}`
                     : run.mode}
@@ -385,7 +479,10 @@ export function AdminPage() {
                         requestState === 'loading' || !run.has_training_checkpoint
                       }
                       onClick={() =>
-                        void runAction('/admin/training/resume', { run_name: run.run_name })
+                        void runAction('/admin/training/resume', {
+                          run_name: run.run_name,
+                          env_id: run.env_id ?? 'flappy_bird',
+                        })
                       }
                     >
                       Resume
@@ -406,13 +503,13 @@ export function AdminPage() {
           <div className="table-header-copy">
             <div>
               <h2>Run configuration snapshots</h2>
-              <p>Stored overrides make each experiment easier to compare later.</p>
+              <p>NEAT overrides are stored per run so you can compare experiments and reproduce any result.</p>
             </div>
           </div>
           <div className="run-config-list">
             {status.runs.map((run) => (
               <article key={`${run.run_name}-config`} className="run-config-card">
-                <h3>{run.run_name} · {run.mode}</h3>
+                <h3>{run.run_name} · {(run.env_id ?? 'flappy_bird').replace('_', ' ')} · {run.mode}</h3>
                 <p>
                   {Object.keys(run.neat_overrides).length > 0
                     ? Object.entries(run.neat_overrides)

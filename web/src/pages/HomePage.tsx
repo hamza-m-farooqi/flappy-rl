@@ -1,21 +1,22 @@
 import { Link } from 'react-router-dom';
-import { Activity, Gamepad2, Shield, Trophy } from 'lucide-react';
+import { Activity, Cpu, Gamepad2, Shield, Trophy, Zap } from 'lucide-react';
 
 export function HomePage() {
   return (
     <section className="page page-home">
       <div className="heading-copy home-shell">
-        <p className="eyebrow">Browser Platform</p>
-        <h1>Train, race, and monitor flappy agents in one UI.</h1>
+        <p className="eyebrow">Multi-Environment RL Sandbox</p>
+        <h1>Train neural networks. Watch them evolve. Race the champion.</h1>
         <p className="lede">
-          The frontend already covers local play, live training telemetry, champion
-          races, leaderboard review, and protected admin controls. The UI can now
-          present that flow with more clarity and more product-level polish.
+          NeuroArena applies <strong>NEAT neuroevolution</strong> to game-playing agents across
+          multiple environments. Every generation streams live to your browser over WebSocket —
+          watch the swarm learn, pipe by pipe, generation by generation.
         </p>
         <div className="home-badge-cloud">
-          <span className="home-badge">React + Vite shell</span>
-          <span className="home-badge">Canvas game rendering</span>
-          <span className="home-badge">Live WebSocket views</span>
+          <span className="home-badge">NEAT neuroevolution</span>
+          <span className="home-badge">Live WebSocket streams</span>
+          <span className="home-badge">Multi-environment</span>
+          <span className="home-badge">Browser play + AI compete</span>
         </div>
       </div>
 
@@ -23,33 +24,36 @@ export function HomePage() {
         <div className="hero-card">
           <div className="split-header">
             <div>
-              <h2>Operational flow</h2>
-              <p>Keep the same functionality, but make the main paths clearer to enter.</p>
+              <h2>What you can do right now</h2>
+              <p>
+                Flappy Bird is the first environment. Pick a mode, play yourself, or fire up the
+                trainer and watch NEAT evolve agents from scratch.
+              </p>
             </div>
-            <span className="status-chip live">UI refresh active</span>
+            <span className="status-chip live">Flappy Bird · Live</span>
           </div>
 
           <ul className="hero-highlights">
             <li>
               <strong>Play locally</strong>
-              Instant browser physics and score submission.
+              Browser physics with instant response. Choose Easy, Hard, or Ultra mode.
             </li>
             <li>
-              <strong>Watch training</strong>
-              Live generation metrics and canvas playback.
+              <strong>Watch NEAT train</strong>
+              Start a named run from Admin, then watch the swarm evolve on the Training page.
             </li>
             <li>
-              <strong>Race champions</strong>
-              Compare the player against saved AI runs.
+              <strong>Race a champion</strong>
+              Pick any saved training run and face its best-ever genome head to head.
             </li>
           </ul>
 
           <div className="hero-actions">
             <Link to="/play" className="action-button">
-              Open Play Mode
+              Play Now
             </Link>
             <Link to="/training" className="ghost-button">
-              View Training
+              Watch Training
             </Link>
           </div>
         </div>
@@ -59,15 +63,15 @@ export function HomePage() {
             <span className="feature-icon">
               <Gamepad2 size={20} />
             </span>
-            <h2>Play</h2>
-            <p>Keyboard-first game flow with score persistence.</p>
+            <h2>Flappy Bird</h2>
+            <p>Single-agent, discrete action space. Easy / Hard / Ultra modes with dynamic difficulty and pickups.</p>
           </article>
           <article className="feature-card mini">
             <span className="feature-icon">
-              <Activity size={20} />
+              <Cpu size={20} />
             </span>
-            <h2>Training</h2>
-            <p>Generation, fitness, alive count, and checkpoint visibility.</p>
+            <h2>More coming</h2>
+            <p>T-Rex Run, 4-Way Traffic, Chess. Adding a new game takes one Python class and one React component.</p>
           </article>
         </div>
       </div>
@@ -75,26 +79,47 @@ export function HomePage() {
       <div className="feature-list">
         <article className="feature-card">
           <span className="feature-icon">
+            <Activity size={20} />
+          </span>
+          <h2>Live evolution monitor</h2>
+          <p>
+            WebSocket streams push every simulation frame to the browser. Generation stats,
+            fitness charts, species counts, and the current champion network topology — all live.
+          </p>
+        </article>
+
+        <article className="feature-card">
+          <span className="feature-icon">
+            <Zap size={20} />
+          </span>
+          <h2>Multi-run training</h2>
+          <p>
+            Multiple named training runs can evolve concurrently. Each run gets its own
+            checkpoint folder, champion genome, and WebSocket channel. Switch between them
+            on the Training page.
+          </p>
+        </article>
+
+        <article className="feature-card">
+          <span className="feature-icon">
             <Trophy size={20} />
           </span>
-          <h2>Leaderboard flow</h2>
-          <p>Scores remain tied to the same backend endpoints while the presentation gets cleaner.</p>
+          <h2>Champion races &amp; leaderboard</h2>
+          <p>
+            Race any saved AI champion head-to-head through a shared pipe sequence. Submit
+            your human score to the MongoDB-backed leaderboard and see where you rank.
+          </p>
         </article>
 
         <article className="feature-card">
           <span className="feature-icon">
             <Shield size={20} />
           </span>
-          <h2>Admin controls</h2>
-          <p>Protected training management stays intact with clearer action grouping and run status.</p>
-        </article>
-
-        <article className="feature-card">
-          <span className="feature-icon">
-            <Activity size={20} />
-          </span>
-          <h2>Shared shell</h2>
-          <p>Consistent panels, metrics, buttons, and table styling now carry across every route.</p>
+          <h2>Admin control panel</h2>
+          <p>
+            JWT-protected admin panel. Start new runs with custom NEAT hyperparameter overrides,
+            resume from checkpoints, or stop any active run — all from the browser.
+          </p>
         </article>
       </div>
     </section>

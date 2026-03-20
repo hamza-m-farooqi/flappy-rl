@@ -25,6 +25,7 @@ class TrainingManager:
         resume: bool,
         mode: str | None = None,
         neat_overrides: dict[str, int | float] | None = None,
+        env_id: str = "flappy_bird",
     ) -> dict[str, Any]:
         """Start a named training run.
 
@@ -45,6 +46,7 @@ class TrainingManager:
                 resume=resume,
                 mode=mode,
                 neat_overrides=neat_overrides,
+                env_id=env_id,
             )
             thread = threading.Thread(target=trainer.run, daemon=True)
             thread.start()

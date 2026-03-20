@@ -11,18 +11,27 @@ const NetworkGraph = lazy(async () => {
 
 type ChampionSummary = {
   run_name: string;
+  env_id?: string;
   mode: string;
   best_score: number | null;
   best_fitness: number | null;
   last_saved_generation: number | null;
 };
 
+// Registered game environments — extend as new envs ship.
+const REGISTERED_ENVS: { env_id: string; label: string }[] = [
+  { env_id: 'flappy_bird', label: 'Flappy Bird' },
+];
+
 export function CompetePage() {
   const [champions, setChampions] = useState<ChampionSummary[]>([]);
+  const [envFilter, setEnvFilter] = useState('flappy_bird');
   const [modeFilter, setModeFilter] = useState('easy');
   const [selectedRunName, setSelectedRunName] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const { frame, status, errorMessage, jump, restart } = useCompeteSocket(selectedRunName);
+
+  const activeEnvLabel = REGISTERED_ENVS.find((e) => e.env_id === envFilter)?.label ?? envFilter;
 
   useEffect(() => {
     let active = true;
@@ -101,11 +110,12 @@ export function CompetePage() {
     <section className="page page-training">
       <div className="page-heading">
         <div className="heading-copy">
-          <p className="eyebrow">Compete</p>
-          <h1>Choose a Champion</h1>
+          <p className="eyebrow">NeuroArena · {activeEnvLabel} · Compete</p>
+          <h1>Race a Champion</h1>
           <p className="lede">
-            Pick a saved training run, then race its champion in a shared pipe sequence.
-            Press <code>Space</code> to jump once the race starts.
+            Choose a game, pick a saved training run, and race its best-ever genome through a
+            shared pipe sequence. The AI and you navigate the exact same obstacles
+            simultaneously — press <code>Space</code> to jump.
           </p>
         </div>
         <div className="heading-side">
@@ -128,20 +138,38 @@ export function CompetePage() {
         <div className="table-header-copy">
           <div>
             <h2>Champion catalog</h2>
-            <p>Saved runs are unchanged; the table is just clearer and easier to scan.</p>
+            <p>Saved champions are ordered by score. Filter by game and difficulty to find the best match.</p>
           </div>
-          <select
-            className="text-input mode-select"
-            value={modeFilter}
-            onChange={(event) => {
-              setModeFilter(event.target.value);
-              setSelectedRunName(null);
-            }}
-          >
-            <option value="easy">Easy</option>
-            <option value="hard">Hard</option>
-            <option value="ultra">Ultra</option>
-          </select>
+          <div className="filter-row">
+            {/* Game selector */}
+            <select
+              className="text-input mode-select"
+              value={envFilter}
+              onChange={(event) => {
+                setEnvFilter(event.target.value);
+                setSelectedRunName(null);
+              }}
+            >
+              {REGISTERED_ENVS.map((env) => (
+                <option key={env.env_id} value={env.env_id}>
+                  {env.label}
+                </option>
+              ))}
+            </select>
+            {/* Mode filter */}
+            <select
+              className="text-input mode-select"
+              value={modeFilter}
+              onChange={(event) => {
+                setModeFilter(event.target.value);
+                setSelectedRunName(null);
+              }}
+            >
+              <option value="easy">Easy</option>
+              <option value="hard">Hard</option>
+              <option value="ultra">Ultra</option>
+            </select>
+          </div>
         </div>
         <div className="leaderboard-shell">
           <div className="leaderboard-head leaderboard-row">
@@ -151,7 +179,10 @@ export function CompetePage() {
             <span>Action</span>
           </div>
           {champions
-            .filter((champion) => champion.mode === modeFilter)
+            .filter((champion) =>
+              (champion.env_id ?? 'flappy_bird') === envFilter &&
+              champion.mode === modeFilter,
+            )
             .map((champion) => (
             <div key={champion.run_name} className="leaderboard-row">
               <span className="row-emphasis">{champion.run_name}</span>
@@ -167,9 +198,12 @@ export function CompetePage() {
               </span>
             </div>
           ))}
-          {champions.filter((champion) => champion.mode === modeFilter).length === 0 && !loadError ? (
+          {champions.filter(
+            (c) =>
+              (c.env_id ?? 'flappy_bird') === envFilter && c.mode === modeFilter,
+          ).length === 0 && !loadError ? (
             <p className="status-banner">
-              No {modeFilter} champions are available yet. Finish a named training run first.
+              No {modeFilter} champions for {activeEnvLabel} yet. Finish a named training run first.
             </p>
           ) : null}
         </div>
@@ -286,13 +320,14 @@ export function CompetePage() {
                 <div className="split-header">
                   <div>
                     <h2>Pilot controls</h2>
-                    <p>Use keyboard or pointer input exactly as before.</p>
+                    <p>Keyboard and pointer input both work during the race.</p>
                   </div>
                 </div>
                 <ul className="bullet-list">
-                  <li>Press <code>Space</code> to jump and to start.</li>
-                  <li>Press <code>R</code> to reset at any time.</li>
-                  <li>Tap or click during a live run for pointer-based jumps.</li>
+                  <li>Press <code>Space</code> to jump and to start the race.</li>
+                  <li>Press <code>R</code> to reset the race at any time.</li>
+                  <li>Tap or click anywhere for pointer-based jumps.</li>
+                  <li>You are <strong>blue</strong>, the AI champion is <strong>orange</strong>.</li>
                 </ul>
               </div>
 

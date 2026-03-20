@@ -1,37 +1,34 @@
-# flappy-rl
+# NeuroArena
 
 <div align="center">
-  <img src="assets/home.png" width="100%" alt="flappy-rl home page" />
-  <p align="center"><em>Real-time Neuroevolution Monitoring & Visualization for Flappy Bird</em></p>
+  <img src="assets/home.png" width="100%" alt="NeuroArena home page" />
+  <p align="center"><em>A General Multi-Environment Neuroevolution Sandbox — train AI, watch it evolve, compete against it.</em></p>
 </div>
 
-`flappy-rl` is a browser-first Flappy Bird + neuroevolution project built with a Python
-backend and a React frontend. It currently supports local human play, live browser-based
-training visualization, MongoDB-backed leaderboard submissions, and human-vs-AI compete
-mode using a saved champion genome.
+**NeuroArena** (`neuro-arena`) is a browser-first platform for training and visualising Reinforcement Learning agents across multiple game environments. It applies **NEAT (NeuroEvolution of Augmenting Topologies)** to evolve neural networks in real time, streaming every frame to a React frontend over WebSocket so you can watch intelligence emerge, generation by generation.
+
+Flappy Bird is the first environment. The architecture is built to support arbitrary new environments — side-scrollers, multi-agent intersections, turn-based games — with minimal boilerplate.
 
 ## Current Features
 
 - FastAPI backend with REST and WebSocket endpoints
-- local Pygame Flappy Bird runtime for manual play
-- browser play mode with client-side physics for low-latency controls
-- live training monitor that streams a NEAT-controlled bird swarm over WebSocket
-- training monitor that shows game score and fitness separately
-- admin page for starting, resuming, and stopping named training runs
+- **Multi-environment abstraction** (`BaseEnvironment`) — add new games by implementing one interface
+- Flappy Bird: local Pygame play, browser play (client-side physics), multi-mode difficulty (Easy / Hard / Ultra with dynamic difficulty, pickups)
+- Live training monitor streaming a NEAT bird swarm over WebSocket in real time
+- Fitness and score charts per generation
+- Admin panel for starting, resuming, and stopping **multiple concurrent named training runs**
 - JWT-protected admin routes with browser login
-- compete mode that lets the player choose a saved AI champion before racing
-- champion genome persistence under named run folders like `checkpoints/spring-run/champion.pkl`
-- historical best snapshots such as `checkpoints/spring-run/generation5-8.pkl`
-- resumable NEAT population checkpoints such as `checkpoints/spring-run/neat-checkpoint-5`
-- leaderboard API with MongoDB persistence
-- leaderboard page and browser score submission flow
-- shared game configuration via `config/game.toml`
+- NEAT hyperparameter overrides (pop size, mutation rates, etc.) configurable per run from the UI
+- Compete mode — choose a saved AI champion genome and race against it in the browser
+- Champion genome persistence under named run folders (`checkpoints/<run-name>/champion.pkl`)
+- Historical best snapshots and resumable NEAT population checkpoints
+- MongoDB-backed leaderboard with browser score submission
 
 ## UI Showcase
 
 <div align="center">
   <img src="assets/flappy-rl-training.gif" width="100%" alt="Live Training Demo" />
-  <p align="center"><em>Visualizing server-side Neuroevolution in real-time</em></p>
+  <p align="center"><em>Visualising server-side Neuroevolution in real-time</em></p>
 </div>
 
 | Play Mode | Training Monitor |
@@ -39,73 +36,110 @@ mode using a saved champion genome.
 | <img src="assets/play.png" width="400" alt="Play Mode" /> | <img src="assets/training.png" width="400" alt="Training Monitor" /> |
 | *Direct Browser Controls* | *Real-time Neuroevolution Progress* |
 
+## Architecture
+
+NeuroArena has a clean four-layer architecture:
+
+```
+neuro-arena/
+├── src/
+│   ├── core/                  # BaseEnvironment interface + Spaces
+│   ├── environments/          # All game environments
+│   │   ├── registry.py        # env_id → class mapping
+│   │   └── flappy_bird/       # Flappy Bird env + config + neat.cfg
+│   ├── ai/                    # Generic NEAT trainer (env-agnostic)
+│   ├── db/                    # MongoDB client
+│   ├── server/                # FastAPI app, routers, WebSocket handler
+│   └── main.py                # Local runtime entrypoint
+├── web/
+│   └── src/
+│       ├── environments/      # Per-env frontend renderers + engine
+│       │   └── FlappyBird/    # FlappyBird client-side engine
+│       └── pages/             # React pages (Play, Train, Compete, Admin…)
+├── config/                    # Legacy config root (env configs live in src/environments/)
+├── checkpoints/               # Named training run directories + saved champions
+├── assets/                    # Showcase images and screenshots
+├── docs/                      # Developer guides
+└── scripts/                   # Dev helpers
+```
+
 ## Stack
 
-- Python 3.10+
-- `uv`
-- FastAPI
-- `neat-python`
-- `pygame-ce`
-- MongoDB via `motor`
-- React + Vite + TypeScript
+| Layer | Technologies |
+|---|---|
+| **Language** | Python 3.10+, TypeScript |
+| **Package Management** | `uv` (backend), `npm` (frontend) |
+| **Web Framework** | FastAPI + Uvicorn (ASGI) |
+| **AI/ML** | `neat-python` (NEAT neuroevolution) |
+| **Database** | MongoDB (async via `motor`) |
+| **Streaming** | WebSockets (native ASGI) |
+| **Local Play** | `pygame-ce` |
+| **Frontend** | React + Vite, Zustand, Recharts, HTML5 Canvas |
+| **Auth** | JWT (admin routes) |
 
-## Project Structure
+## Quick Start
 
-```text
-flappy-rl/
-├── assets/              # Showcase images and screenshots
-├── config/              # Game and NEAT configuration
-├── checkpoints/         # Named training run directories and saved champions
-├── src/
-│   ├── ai/              # NEAT training layer
-│   ├── db/              # MongoDB client
-│   ├── game/            # Python game simulation and pygame renderer
-│   ├── server/          # FastAPI app, routers, websocket handling
-│   └── main.py          # Local runtime entrypoint
-├── scripts/             # Dev and commit helpers
-├── web/                 # React frontend
-└── docs/                # Project planning and architecture notes
-```
-
-## Environment Setup
-
-Backend environment:
+### 1. Clone and install
 
 ```bash
+git clone https://github.com/your-username/neuro-arena.git
+cd neuro-arena
+
+# Backend
 uv sync
+
+# Frontend
+cd web && npm install && cd ..
 ```
 
-Frontend environment:
+### 2. Configure env files
 
 ```bash
-cd web
-npm install
-```
-
-Backend env file:
-
-```bash
-cp .env.server.example .env.server
-```
-
-Frontend env file:
-
-```bash
+cp .env.server.example .env.server   # set ADMIN_PASSWORD + MONGODB_URI
 cp .env.web.example .env.web
 ```
 
+### 3. Run
+
+```bash
+# Terminal 1 — backend API
+uv run python -m src.main --serve
+
+# Terminal 2 — frontend
+cd web && npm run dev
+```
+
+Open `http://localhost:5173` in your browser.
+
+Or use the dev helper which starts both:
+
+```bash
+sh scripts/dev.sh
+```
+
+## Running Modes
+
+| Command | What it does |
+|---|---|
+| `uv run python -m src.main --serve` | API + WebSocket server only |
+| `uv run python -m src.main --human` | Local Pygame play window |
+| `uv run python -m src.main --train --serve --run-name my-run` | Training + API server |
+| `uv run python -m src.main --train --serve --resume --run-name my-run` | Resume from checkpoint |
+
+Training can also be started from the browser Admin panel without CLI flags — the Admin page lets you create, resume, and stop named runs.
+
 ## Environment Variables
 
-Backend `.env.server`:
+**`.env.server`**
 
 ```bash
 MONGODB_URI=mongodb://localhost:27017
-MONGODB_DATABASE=flappy_rl
+MONGODB_DATABASE=neuro_arena
 ADMIN_PASSWORD=change-me
 ADMIN_JWT_SECRET=change-me-secret
 ```
 
-Frontend `.env.web`:
+**`.env.web`**
 
 ```bash
 VITE_API_BASE_URL=http://localhost:8000
@@ -113,114 +147,49 @@ VITE_TRAINING_WS_URL=ws://localhost:8000/ws/training
 VITE_COMPETE_WS_URL=ws://localhost:8000/ws/compete
 ```
 
-## Running Locally
-
-Start the standard backend API:
-
-```bash
-uv run python -m src.main
-```
-
-Start the frontend:
-
-```bash
-cd web
-npm run dev
-```
-
-Start the local Pygame human-play mode:
-
-```bash
-uv run python -m src.main --human
-```
-
-Start a named NEAT training run with the backend server:
-
-```bash
-uv run python -m src.main --train --serve --run-name spring-run
-```
-
-Resume a named NEAT training run from its latest saved population checkpoint:
-
-```bash
-uv run python -m src.main --train --serve --resume --run-name spring-run
-```
-
-Training automatically updates a named run champion only when that run produces a new
-all-time best result. Each new all-time best also saves a historical snapshot such as
-`checkpoints/spring-run/generation5-8.pkl`, where the number is the generation and the
-saved score for that run’s champion.
-
-Training also saves resumable population checkpoints such as
-`checkpoints/spring-run/neat-checkpoint-5` every few generations. These checkpoints
-contain the full NEAT population state and are what `--resume` uses to continue
-training after a restart. `champion.pkl` inside the same run folder is used for
-compete mode and best-model loading.
-
-You can manage named runs from the browser at `/admin`:
-- log in with the admin password from `.env.server`
-- start a new run by choosing a training name
-- resume an existing run from its latest checkpoint
-- stop the active run
-
-Run compete mode:
-
-1. make sure at least one named training run has a saved champion
-2. start the backend:
-
-```bash
-uv run python -m src.main
-```
-
-3. start the frontend:
-
-```bash
-cd web
-npm run dev
-```
-
-4. open:
-
-```text
-http://localhost:5173/compete
-```
-
-The compete page will first show a champion catalog. Choose a saved run, then start the race against that run’s champion.
-
-Start the standard dev helper:
-
-```bash
-sh scripts/dev.sh
-```
-
-This starts the normal API server plus the Vite dev server. For live training, use the
-separate `--train --serve` command above instead.
-
 ## Local URLs
 
-- frontend: `http://localhost:5173`
-- backend: `http://localhost:8000`
-- backend health: `http://localhost:8000/health`
-- training websocket: `ws://localhost:8000/ws/training`
-- compete websocket: `ws://localhost:8000/ws/compete`
+| URL | Service |
+|---|---|
+| `http://localhost:5173` | Frontend |
+| `http://localhost:8000` | Backend API |
+| `http://localhost:8000/health` | Health check |
+| `ws://localhost:8000/ws/training/{run_name}` | Training WebSocket stream |
+| `ws://localhost:8000/ws/compete` | Compete WebSocket |
 
 ## Verification
 
-Backend lint:
-
 ```bash
+# Python tests
+uv run pytest tests/ -v
+
+# Backend lint
 uv run ruff check src
+
+# Frontend type-check
+cd web && npx tsc --noEmit
+
+# Frontend build
+cd web && npm run build
 ```
 
-Frontend build:
+## Developer Guide
 
-```bash
-cd web
-npm run build
-```
+See [`docs/developer-guide.md`](./docs/developer-guide.md) for a full walkthrough on:
+- Local development workflow
+- Adding a new game environment (backend + frontend)
+- Architecture deep-dive
+- Testing strategy
 
-Automated tests:
+## Roadmap
 
-```bash
-uv run pytest tests/test_physics.py tests/test_api.py
-```
+- [ ] T-Rex Run environment
+- [ ] 4-Way Traffic Intersection (multi-agent)
+- [ ] Chess (turn-based, self-play)
+- [ ] Lobby / game selector UI
+- [ ] Per-environment leaderboard filters
+- [ ] Replay recording and playback
+
+## License
+
+MIT

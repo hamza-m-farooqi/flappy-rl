@@ -11,6 +11,7 @@ from src.ai.neat_runtime import (
     override_parameter_catalog,
 )
 from src.config import list_game_modes, normalize_game_mode
+from src.environments.registry import list_envs
 from src.server.auth import (
     authenticate_admin_password,
     create_admin_token,
@@ -26,6 +27,7 @@ class TrainingRequest(BaseModel):
     """Incoming admin request for starting or resuming a named training run."""
 
     run_name: str = Field(min_length=1, max_length=64)
+    env_id: str = Field(default="flappy_bird", min_length=1, max_length=64)
     mode: str = Field(default="easy", min_length=1, max_length=32)
     neat_overrides: dict[str, int | float] = Field(default_factory=dict)
 
@@ -55,9 +57,27 @@ async def login(payload: LoginRequest) -> dict[str, str]:
 async def get_training_status() -> dict[str, Any]:
     """Return multi-run training status and discovered named runs."""
     status = training_manager.status()
+    # Still include global defaults (flappy_bird) for backward compat
     status["override_parameters"] = override_parameter_catalog()
-    status["game_modes"] = list_game_modes()
+    status["game_modes"] = list_game_modes("flappy_bird")
     return status
+
+
+@router.get("/environments", dependencies=[Depends(require_admin)])
+async def get_environments() -> dict[str, Any]:
+    """Return all registered environments with their modes and NEAT override params."""
+    environments = []
+    for env_info in list_envs():
+        env_id = env_info["env_id"]
+        environments.append(
+            {
+                "env_id": env_id,
+                "label": env_id.replace("_", " ").title(),
+                "game_modes": list_game_modes(env_id),
+                "override_parameters": override_parameter_catalog(env_id),
+            }
+        )
+    return {"environments": environments}
 
 
 @router.post("/training/start", dependencies=[Depends(require_admin)])
@@ -67,8 +87,9 @@ async def start_training(payload: TrainingRequest) -> dict[str, Any]:
         return training_manager.start(
             normalize_run_name(payload.run_name),
             resume=False,
-            mode=normalize_game_mode(payload.mode),
+            mode=normalize_game_mode(payload.mode, env_id=payload.env_id),
             neat_overrides=normalize_neat_overrides(payload.neat_overrides),
+            env_id=payload.env_id,
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -83,6 +104,7 @@ async def resume_training(payload: TrainingRequest) -> dict[str, Any]:
         return training_manager.start(
             normalize_run_name(payload.run_name),
             resume=True,
+            env_id=payload.env_id,
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error

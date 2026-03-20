@@ -23,7 +23,6 @@ htmlcov/
 
 # Runtime/generated project data
 checkpoints/
-docs/
 
 # Frontend
 web/node_modules/

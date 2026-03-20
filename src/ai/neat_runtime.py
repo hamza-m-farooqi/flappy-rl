@@ -104,13 +104,30 @@ def load_neat_config_parser() -> configparser.ConfigParser:
     return parser
 
 
-def default_neat_overrides() -> dict[str, int | float]:
-    """Return the default values for supported UI-editable NEAT parameters."""
-    parser = load_neat_config_parser()
+def default_neat_overrides(env_id: str = "flappy_bird") -> dict[str, int | float]:
+    """Return the default values for supported UI-editable NEAT parameters.
+
+    Reads from the environment's own neat.cfg when env_id is provided.
+    """
+    from src.config import get_neat_config_path
+
+    env_config_path = get_neat_config_path(env_id)
+    parser = configparser.ConfigParser()
+    parser.optionxform = str
+    if env_config_path.exists():
+        parser.read(env_config_path)
+    else:
+        parser.read(NEAT_CONFIG_PATH)
     defaults: dict[str, int | float] = {}
     for key, metadata in NEAT_PARAM_DEFINITIONS.items():
-        raw_value = parser.get(metadata["section"], key)
-        defaults[key] = _coerce_value(raw_value, metadata["type"])
+        try:
+            raw_value = parser.get(metadata["section"], key)
+            defaults[key] = _coerce_value(raw_value, metadata["type"])
+        except (configparser.NoSectionError, configparser.NoOptionError):
+            # Fall back to global config if env config is missing the key
+            fallback = load_neat_config_parser()
+            raw_value = fallback.get(metadata["section"], key)
+            defaults[key] = _coerce_value(raw_value, metadata["type"])
     return defaults
 
 
@@ -298,9 +315,13 @@ def serialize_network(
     }
 
 
-def override_parameter_catalog() -> list[dict[str, Any]]:
-    """Expose UI-editable NEAT parameter metadata to the admin page."""
-    defaults = default_neat_overrides()
+def override_parameter_catalog(env_id: str = "flappy_bird") -> list[dict[str, Any]]:
+    """Expose UI-editable NEAT parameter metadata to the admin page.
+
+    Reads default values from the environment's own neat.cfg so each env
+    shows its own correct defaults in the Admin panel.
+    """
+    defaults = default_neat_overrides(env_id=env_id)
     return [
         {
             "key": key,

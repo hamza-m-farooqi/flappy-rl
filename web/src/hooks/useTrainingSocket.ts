@@ -3,9 +3,18 @@ import axios from 'axios';
 import type { TrainingFrame } from '../components/GameCanvas';
 import { API_BASE_URL, TRAINING_WS_BASE_URL } from '../config/env';
 
+type PublicRunSummary = {
+  run_name: string;
+  env_id?: string;
+  mode: string;
+  has_champion: boolean;
+  has_training_checkpoint: boolean;
+};
+
 type PublicTrainingStatus = {
   is_running: boolean;
   active_run_names: string[];
+  runs?: PublicRunSummary[];
 };
 
 /**

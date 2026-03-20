@@ -1,0 +1,1 @@
+"""Flappy Bird environment package."""

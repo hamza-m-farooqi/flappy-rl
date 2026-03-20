@@ -25,12 +25,12 @@ from src.ai.neat_runtime import (
     save_neat_overrides,
     serialize_network,
 )
-from src.ai.sensors import build_inputs
-from src.config import load_game_config, normalize_game_mode
-from src.game.world import World
+from src.config import get_neat_config_path, normalize_game_mode
+from src.environments.registry import get_env_class
 from src.server.ws_handler import connection_manager
 
 
+# Legacy default — resolved dynamically per env_id via get_neat_config_path()
 NEAT_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "neat.cfg"
 
 
@@ -43,9 +43,15 @@ class NeatTrainer:
         resume: bool = False,
         mode: str | None = None,
         neat_overrides: dict[str, int | float] | None = None,
+        env_id: str = "flappy_bird",
     ) -> None:
-        self.game_config = load_game_config()
-        self.training_config = self.game_config["training"]
+        self.env_id = env_id
+        self.env_class = get_env_class(env_id)
+        # Load training config via the env's own config.toml
+        from src.config import load_env_game_config
+
+        _cfg = load_env_game_config(env_id)
+        self.training_config = _cfg["training"]
         self.stop_event = threading.Event()
         self.run_name = normalize_run_name(run_name)
         self.mode = self._resolve_mode(mode=mode, resume=resume)
@@ -70,7 +76,7 @@ class NeatTrainer:
         self.population.add_reporter(
             neat.Checkpointer(
                 generation_interval=self.checkpoint_generation_interval,
-                filename_prefix=training_checkpoint_prefix(self.run_name),
+                filename_prefix=training_checkpoint_prefix(self.run_name, self.env_id),
             )
         )
         self._bootstrap_champion_state()
@@ -86,9 +92,11 @@ class NeatTrainer:
 
     def _build_config(self) -> neat.Config:
         return build_neat_config(
-            config_path=NEAT_CONFIG_PATH,
+            config_path=get_neat_config_path(self.env_id),
             overrides=self.neat_overrides,
-            generated_dir=Path(training_checkpoint_prefix(self.run_name)).parent,
+            generated_dir=Path(
+                training_checkpoint_prefix(self.run_name, self.env_id)
+            ).parent,
         )
 
     def _build_population(self, resume: bool) -> neat.Population:
@@ -97,33 +105,32 @@ class NeatTrainer:
             self.run_name,
             mode=self.mode,
             neat_overrides=self.neat_overrides,
+            env_id=self.env_id,
         )
         if not resume:
             save_neat_overrides(
-                Path(training_checkpoint_prefix(self.run_name)).parent,
+                Path(training_checkpoint_prefix(self.run_name, self.env_id)).parent,
                 self.neat_overrides,
             )
             return neat.Population(config)
 
-        checkpoint_path = latest_training_checkpoint(self.run_name)
+        checkpoint_path = latest_training_checkpoint(self.run_name, self.env_id)
         if checkpoint_path is None:
             save_neat_overrides(
-                Path(training_checkpoint_prefix(self.run_name)).parent,
+                Path(training_checkpoint_prefix(self.run_name, self.env_id)).parent,
                 self.neat_overrides,
             )
             return neat.Population(config)
 
-        # Resume with the saved NEAT config embedded in the checkpoint so internal
-        # indexers like genome/node innovation state continue correctly.
         return neat.Checkpointer.restore_checkpoint(str(checkpoint_path))
 
     def _bootstrap_champion_state(self) -> None:
-        if champion_exists(self.run_name):
-            champion = load_champion(self.run_name)
+        if champion_exists(self.run_name, self.env_id):
+            champion = load_champion(self.run_name, self.env_id)
             self.best_fitness = float(champion.fitness or 0.0)
             self.best_genome_id = getattr(champion, "key", None)
 
-        metadata = load_champion_metadata(self.run_name)
+        metadata = load_champion_metadata(self.run_name, self.env_id)
         if metadata is not None:
             self.best_pipes = int(metadata.get("score", 0))
             self.last_saved_generation = int(metadata.get("generation", 0))
@@ -131,7 +138,7 @@ class NeatTrainer:
             self.generation = self.population.generation
             return
 
-        historical = latest_historical_champion(self.run_name)
+        historical = latest_historical_champion(self.run_name, self.env_id)
         if historical is not None:
             checkpoint_path, generation, score = historical
             self.best_pipes = score
@@ -142,12 +149,14 @@ class NeatTrainer:
 
     def _resolve_mode(self, mode: str | None, resume: bool) -> str:
         if not resume:
-            return normalize_game_mode(mode)
+            return normalize_game_mode(mode, env_id=self.env_id)
 
-        metadata = load_run_metadata(self.run_name)
+        metadata = load_run_metadata(self.run_name, self.env_id)
         if metadata is not None:
-            return normalize_game_mode(str(metadata.get("mode", "easy")))
-        return normalize_game_mode(mode)
+            return normalize_game_mode(
+                str(metadata.get("mode", "easy")), env_id=self.env_id
+            )
+        return normalize_game_mode(mode, env_id=self.env_id)
 
     def _resolve_neat_overrides(
         self,
@@ -160,7 +169,7 @@ class NeatTrainer:
         if not resume:
             return {}
 
-        metadata = load_run_metadata(self.run_name)
+        metadata = load_run_metadata(self.run_name, self.env_id)
         if metadata is None:
             return {}
         return dict(metadata.get("neat_overrides", {}))
@@ -171,14 +180,20 @@ class NeatTrainer:
         config: neat.Config,
     ) -> None:
         self.generation = self.population.generation
-        world = World.from_config(population_size=len(genomes), mode=self.mode)
+
+        # Instantiate the environment with the correct population size
+        env = self.env_class(population_size=len(genomes), mode=self.mode)
+        env.reset()
+
+        # Build a mapping from NEAT genome_id → agent index
         networks: dict[int, neat.nn.FeedForwardNetwork] = {}
-        bird_by_genome_id = {}
+        genome_id_to_index: dict[int, int] = {}
 
         for index, (genome_id, genome) in enumerate(genomes):
             genome.fitness = 0.0
-            world.birds[index].genome_id = str(genome_id)
-            bird_by_genome_id[genome_id] = world.birds[index]
+            # Tag the underlying bird with the genome_id for WebSocket display
+            env.world.birds[index].genome_id = str(genome_id)
+            genome_id_to_index[genome_id] = index
             networks[genome_id] = neat.nn.FeedForwardNetwork.create(genome, config)
 
         max_frames = int(self.training_config["max_frames_per_generation"])
@@ -192,29 +207,32 @@ class NeatTrainer:
         best_network_snapshot: dict[str, object] | None = None
 
         while (
-            world.alive_count > 0
-            and world.frame_count < max_frames
+            env.alive_count > 0
+            and env.frame_count < max_frames
             and not self.stop_event.is_set()
         ):
+            # Build per-agent actions from network outputs
+            actions: dict[int, int] = {}
             for genome_id, genome in genomes:
-                bird = bird_by_genome_id[genome_id]
+                agent_idx = genome_id_to_index[genome_id]
+                bird = env.world.birds[agent_idx]
                 if not bird.alive:
                     continue
+                inputs = env.build_sensor_inputs(agent_idx)
+                output = networks[genome_id].activate(inputs)[0]
+                actions[agent_idx] = 1 if output > 0.5 else 0
 
-                output = networks[genome_id].activate(build_inputs(world, bird))[0]
-                if output > 0.5:
-                    bird.jump(float(world.bird_config["jump_velocity"]))
-
-            world.step()
+            # Step the environment
+            env.step(actions)
 
             for genome_id, genome in genomes:
-                bird = bird_by_genome_id[genome_id]
-                genome.fitness = float(bird.frames_alive + (bird.pipes_passed * 100))
+                agent_idx = genome_id_to_index[genome_id]
+                genome.fitness = env.compute_fitness(agent_idx)
                 if genome.fitness > generation_best_fitness:
                     generation_best_fitness = genome.fitness
                     generation_best_genome = genome
                     generation_best_genome_id = genome_id
-                    generation_best_pipes = bird.pipes_passed
+                    generation_best_pipes = env.world.birds[agent_idx].pipes_passed
                     best_network_snapshot = serialize_network(
                         genome,
                         config,
@@ -229,23 +247,24 @@ class NeatTrainer:
                 self.run_name,
                 {
                     **self._build_training_payload(
-                        world=world,
+                        env=env,
                         generation_best_fitness=generation_best_fitness,
                         generation_average_fitness=generation_average_fitness,
                         generation_best_pipes=generation_best_pipes,
                         generation_complete=False,
                         generation_end_reason=None,
                     ),
-                    **world.serialize(),
+                    "env_id": self.env_id,
+                    **env.get_state(),
                 },
             )
             time.sleep(frame_delay_ms / 1000)
 
         if self.stop_event.is_set():
             generation_end_reason = "stopped"
-        elif world.alive_count == 0:
+        elif env.alive_count == 0:
             generation_end_reason = "all_birds_dead"
-        elif world.frame_count >= max_frames:
+        elif env.frame_count >= max_frames:
             generation_end_reason = "frame_cap"
 
         self.history.append(
@@ -277,7 +296,7 @@ class NeatTrainer:
                 self.run_name,
                 {
                     **self._build_training_payload(
-                        world=world,
+                        env=env,
                         generation_best_fitness=generation_best_fitness,
                         generation_average_fitness=generation_average_fitness,
                         generation_best_pipes=generation_best_pipes,
@@ -293,7 +312,8 @@ class NeatTrainer:
                         ),
                         include_history=True,
                     ),
-                    **world.serialize(),
+                    "env_id": self.env_id,
+                    **env.get_state(),
                 },
             )
         else:
@@ -301,7 +321,7 @@ class NeatTrainer:
                 self.run_name,
                 {
                     **self._build_training_payload(
-                        world=world,
+                        env=env,
                         generation_best_fitness=generation_best_fitness,
                         generation_average_fitness=generation_average_fitness,
                         generation_best_pipes=generation_best_pipes,
@@ -310,13 +330,14 @@ class NeatTrainer:
                         focus_network=best_network_snapshot,
                         include_history=True,
                     ),
-                    **world.serialize(),
+                    "env_id": self.env_id,
+                    **env.get_state(),
                 },
             )
 
     def _build_training_payload(
         self,
-        world: World,
+        env: object,
         generation_best_fitness: float,
         generation_average_fitness: float,
         generation_best_pipes: int,
@@ -326,13 +347,19 @@ class NeatTrainer:
         focus_network: dict[str, object] | None = None,
         include_history: bool = False,
     ) -> dict[str, object]:
+        # Access the underlying world for legacy payload fields
+        from src.environments.flappy_bird.env import FlappyBirdEnv
+
+        world = env.world if isinstance(env, FlappyBirdEnv) else None  # type: ignore[attr-defined]
+        alive = world.alive_count if world else getattr(env, "alive_count", 0)
+        total = len(world.birds) if world else 0
         payload: dict[str, object] = {
             "type": "training_frame",
             "run_name": self.run_name,
             "generation": self.generation,
             "mode": self.mode,
-            "alive_count": world.alive_count,
-            "total_birds": len(world.birds),
+            "alive_count": alive,
+            "total_birds": total,
             "generation_best_fitness": generation_best_fitness,
             "generation_average_fitness": generation_average_fitness,
             "generation_best_pipes": generation_best_pipes,

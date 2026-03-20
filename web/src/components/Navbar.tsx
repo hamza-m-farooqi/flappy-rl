@@ -14,11 +14,11 @@ export function Navbar() {
     <header className="topbar">
       <NavLink to="/" className="brand">
         <span className="brand-mark" aria-hidden="true">
-          FR
+          NA
         </span>
         <span className="brand-copy">
-          <strong>flappy-rl</strong>
-          <span>Browser-first neuroevolution platform</span>
+          <strong>NeuroArena</strong>
+          <span>Multi-environment neuroevolution sandbox</span>
         </span>
       </NavLink>
 
